@@ -184,20 +184,36 @@
             document.getElementById('priceDisplay').innerText = finalCost.toFixed(2);
         }
 
-        // --- 4. SELECT PAYMENT WAY ---
+        // --- 4. SELECT PAYMENT WAY (FIXED TO AVOID COLOR COLLISIONS) ---
         function setPaymentMethod(method) {
             paymentMethod = method;
             const cashBtn = document.getElementById('payCashBtn');
             const onlineBtn = document.getElementById('payOnlineBtn');
 
+            // Style classes
+            const activeColors = ['border-blue-500', 'bg-blue-50', 'text-blue-700'];
+            const inactiveColors = ['border-slate-300', 'text-slate-700', 'bg-white'];
+
             if (method === "Cash") {
-                cashBtn.classList.add('border-blue-500', 'bg-blue-50', 'text-blue-700');
-                onlineBtn.classList.remove('border-blue-500', 'bg-blue-50', 'text-blue-700');
+                // Style Cash Button as ACTIVE
+                cashBtn.classList.remove(...inactiveColors);
+                cashBtn.classList.add(...activeColors);
+
+                // Style Online Button as INACTIVE
+                onlineBtn.classList.remove(...activeColors);
+                onlineBtn.classList.add(...inactiveColors);
             } else {
-                onlineBtn.classList.add('border-blue-500', 'bg-blue-50', 'text-blue-700');
-                cashBtn.classList.remove('border-blue-500', 'bg-blue-50', 'text-blue-700');
-                calculateCost();
+                // Style Online Button as ACTIVE
+                onlineBtn.classList.remove(...inactiveColors);
+                onlineBtn.classList.add(...activeColors);
+
+                // Style Cash Button as INACTIVE
+                cashBtn.classList.remove(...activeColors);
+                cashBtn.classList.add(...inactiveColors);
             }
+            
+            // Recalculate price
+            calculateCost();
         }
 
         // --- 5. UPLOAD FIRST, THEN GENERATE SUCCESS/QR ---
