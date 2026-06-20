@@ -45,9 +45,11 @@
         // REPLACE WITH YOUR ACTUAL DEPLOYED SUPABASE CREDENTIALS
         const SUPABASE_URL = "https://zokjpxvwzmhiapkeifen.supabase.co";
         const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpva2pweHZ3em1oaWFwa2VpZmVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5MTA5OTIsImV4cCI6MjA5NzQ4Njk5Mn0.XgvacQ3KXx5F1EusaKw_OcX6c5Q88vjM2xlHnJFS7GM";
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        async function submitPrintJob() {
+            // Fix: We changed the variable name here to 'supabaseClient'
+            const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+            async function submitPrintJob() {
             const fileInput = document.getElementById('fileInput');
             const colorMode = document.getElementById('colorMode').value === "true";
             const copies = parseInt(document.getElementById('copies').value);
@@ -56,36 +58,37 @@
 
             if (!fileInput.files.length) {
                 alert("Please select a PDF file first.");
-                return;
+            return;
             }
 
             const file = fileInput.files[0];
             const fileName = `${Date.now()}_${file.name}`;
-
+            
             submitBtn.disabled = true;
             statusMsg.innerText = "Uploading to cloud...";
 
-            // 1. Upload File directly to Cloud Storage
-            const { data: uploadData, error: uploadError } = await supabase.storage
+            // Fix: Changed 'supabase.storage' to 'supabaseClient.storage'
+            const { data: uploadData, error: uploadError } = await supabaseClient.storage
                 .from('print-files')
                 .upload(fileName, file);
 
             if (uploadError) {
+                console.error("Upload error details:", uploadError);
                 statusMsg.innerText = "Upload failed!";
                 submitBtn.disabled = false;
                 return;
             }
 
-            // Get Public URL
-            const { data: urlData } = supabase.storage
+            // Fix: Changed 'supabase.storage' to 'supabaseClient.storage'
+            const { data: urlData } = supabaseClient.storage
                 .from('print-files')
                 .getPublicUrl(fileName);
 
             const fileUrl = urlData.publicUrl;
 
-            // 2. Insert into cloud Database Queue
+            // Fix: Changed 'supabase.from' to 'supabaseClient.from'
             statusMsg.innerText = "Adding to shop queue...";
-            const { error: dbError } = await supabase
+            const { error: dbError } = await supabaseClient
                 .from('print_jobs')
                 .insert([{
                     file_url: fileUrl,
@@ -93,10 +96,11 @@
                     copies: copies,
                     color: colorMode,
                     status: 'Ready to Print',
-                    payment_status: 'Cash at Counter' // Or dynamic payment state
+                    payment_status: 'Cash at Counter'
                 }]);
 
             if (dbError) {
+                console.error("Database error details:", dbError);
                 statusMsg.innerText = "Database error! Please try again.";
             } else {
                 statusMsg.innerText = "File uploaded! Please ask shopkeeper to print.";
