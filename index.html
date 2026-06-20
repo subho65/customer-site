@@ -298,13 +298,40 @@
             }
         }
 
+       // --- 7. COMPLETE FORM RESET (FIXED TO CLEAR MEMORY STACK) ---
         function resetForm() {
+            // 1. Force-enable the upload button and reset its text
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = false;
+            submitBtn.innerText = "Upload & Place Order";
+            
+            // 2. Clear status messages
+            document.getElementById('statusMsg').innerHTML = "";
+            
+            // 3. Swap the screens (Show input form, hide success box)
             document.getElementById('formSection').classList.remove('hidden');
             document.getElementById('successSection').classList.add('hidden');
+            
+            // 4. Wipe input fields completely
             document.getElementById('fileInput').value = "";
             document.getElementById('custName').value = "";
+            
+            // 5. Erase file memory from JavaScript
+            selectedFile = null;
+            totalPages = 1;
+            finalCost = 0;
+            paymentMethod = "";
+            
+            // 6. Hide all previews and print option cards
             document.getElementById('previewContainer').classList.add('hidden');
             document.getElementById('printOptions').classList.add('hidden');
+            document.getElementById('imagePreview').classList.add('hidden');
+            document.getElementById('pdfPreview').classList.add('hidden');
+            
+            // Reset the canvas drawing area
+            const canvas = document.getElementById('pdfPreview');
+            const context = canvas.getContext('2d');
+            context.clearRect(0, 0, canvas.width, canvas.height);
         }
     </script>
 </body>
