@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quick Print Spot</title>
+    <!-- Tailwind CSS, Supabase and PDF.js -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -15,7 +16,7 @@
         <!-- Customer Name Input -->
         <div class="mb-4">
             <label class="block text-slate-700 font-semibold mb-1">Your Name</label>
-            <input type="text" id="custName" placeholder="Enter your name" class="w-full p-2 border border-slate-300 rounded-lg">
+            <input type="text" id="custName" placeholder="Enter your name" class="w-full p-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
         </div>
 
         <!-- File Selector -->
@@ -67,18 +68,42 @@
                 </div>
             </div>
 
-            <!-- Mobile UPI Launch Box -->
-            <div id="upiRedirectBox" class="hidden flex flex-col items-center p-4 border border-blue-200 bg-blue-50 rounded-xl">
-                <p class="text-sm font-semibold text-blue-800 mb-2">Complete payment inside your UPI app:</p>
-                <a id="upiPayLink" href="#" class="w-full bg-green-600 text-white p-3 rounded-lg text-center font-bold shadow hover:bg-green-700 block transition">
-                    📱 Open Payment App (Pay ₹<span id="upiAmountText">0</span>)
-                </a>
-                <p class="text-xs text-slate-500 mt-2 text-center">Tapping this button launches Google Pay, Paytm, or PhonePe automatically on your phone.</p>
+            <!-- Mobile UPI Launch & QR Box -->
+            <div id="upiRedirectBox" class="hidden flex flex-col items-center p-4 border border-blue-200 bg-blue-50 rounded-xl space-y-4">
+                
+                <!-- QR Code (Universal & 100% Reliable for Personal & Business Accounts) -->
+                <div class="flex flex-col items-center bg-white p-3 rounded-lg shadow-sm border border-slate-200 w-full">
+                    <p class="text-xs font-semibold text-slate-500 mb-2">👉 Scan QR with GPay/PhonePe/Paytm:</p>
+                    <img id="qrImage" class="w-44 h-44 bg-white" src="" alt="UPI QR Code">
+                    <p class="text-[10px] text-amber-600 font-semibold mt-2 text-center">⚠️ Personal accounts: Please scan this QR to pay instead of tapping links.</p>
+                </div>
+
+                <!-- Direct App Launchers (For Merchant Accounts only) -->
+                <div class="w-full space-y-2">
+                    <p class="text-[10px] font-semibold text-center text-slate-400">Or Tap (Merchant Accounts Only):</p>
+                    
+                    <div class="grid grid-cols-3 gap-2">
+                        <!-- PhonePe Button -->
+                        <a id="phonepeLink" href="#" class="bg-purple-600 text-white py-2 px-1 rounded-lg text-center font-bold text-xs shadow hover:bg-purple-700 block transition">
+                            PhonePe
+                        </a>
+                        <!-- Paytm Button -->
+                        <a id="paytmLink" href="#" class="bg-blue-500 text-white py-2 px-1 rounded-lg text-center font-bold text-xs shadow hover:bg-blue-600 block transition">
+                            Paytm
+                        </a>
+                        <!-- Google Pay Button -->
+                        <a id="gpayLink" href="#" class="bg-green-600 text-white py-2 px-1 rounded-lg text-center font-bold text-xs shadow hover:bg-green-700 block transition">
+                            GPay
+                        </a>
+                    </div>
+                </div>
+
+                <p class="text-[10px] text-slate-500 text-center">After making payment, click the button below to confirm your order.</p>
             </div>
 
-            <!-- Submit Order -->
-            <button onclick="submitPrintJob()" id="submitBtn" class="w-full bg-blue-600 text-white p-3 rounded-xl font-bold hover:bg-blue-700 transition">
-                Place Print Order
+            <!-- Action Button -->
+            <button onclick="generatePayment()" id="actionBtn" class="w-full bg-blue-600 text-white p-3 rounded-xl font-bold hover:bg-blue-700 transition">
+                Proceed to Pay
             </button>
         </div>
         <p id="statusMsg" class="mt-4 text-center text-sm font-medium text-slate-600"></p>
@@ -88,8 +113,9 @@
         // --- 1. CONFIGURATION ---
         const SUPABASE_URL = "https://zokjpxvwzmhiapkeifen.supabase.co"; 
         const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpva2pweHZ3em1oaWFwa2VpZmVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5MTA5OTIsImV4cCI6MjA5NzQ4Njk5Mn0.XgvacQ3KXx5F1EusaKw_OcX6c5Q88vjM2xlHnJFS7GM";
-        const UPI_ID = "7863917370@upi"; // <-- Replace with your real UPI ID
-        const SHOP_NAME = "Subhojati Dutta";
+        
+        const UPI_ID = "7863917370@upi"; // <--- REPLACE WITH YOUR REAL SHOP UPI ID
+        const SHOP_NAME = "Smart Print Spot";
 
         const BW_RATE = 2.00;
         const COLOR_RATE = 10.00;
@@ -128,7 +154,9 @@
                 reader.readAsDataURL(file);
                 document.getElementById('pageCountDisplay').innerText = "1 (Image)";
                 document.getElementById('printOptions').classList.remove('hidden');
-                calculateCost();
+                
+                // AUTOMATICALLY DEFAULT TO ONLINE PAYMENT SETUP
+                setPaymentMethod('Online');
             } 
             // If it is a PDF
             else if (file.type === 'application/pdf') {
@@ -140,7 +168,6 @@
                         totalPages = pdf.numPages;
                         document.getElementById('pageCountDisplay').innerText = totalPages;
 
-                        // Render page 1 to canvas for preview
                         const page = await pdf.getPage(1);
                         const viewport = page.getViewport({ scale: 0.5 });
                         const canvas = pdfPreview;
@@ -151,7 +178,9 @@
                         await page.render({ canvasContext: context, viewport: viewport }).promise;
                         pdfPreview.classList.remove('hidden');
                         document.getElementById('printOptions').classList.remove('hidden');
-                        calculateCost();
+                        
+                        // AUTOMATICALLY DEFAULT TO ONLINE PAYMENT SETUP
+                        setPaymentMethod('Online');
                     } catch (err) {
                         alert("Error reading PDF file!");
                     }
@@ -182,20 +211,64 @@
             const cashBtn = document.getElementById('payCashBtn');
             const onlineBtn = document.getElementById('payOnlineBtn');
             const upiBox = document.getElementById('upiRedirectBox');
+            const actionBtn = document.getElementById('actionBtn');
 
             if (method === "Cash") {
                 cashBtn.classList.add('border-blue-500', 'bg-blue-50', 'text-blue-700');
                 onlineBtn.classList.remove('border-blue-500', 'bg-blue-50', 'text-blue-700');
                 upiBox.classList.add('hidden');
+                
+                // Direct print placement for Cash
+                actionBtn.innerText = "Place Print Order";
+                actionBtn.setAttribute("onclick", "submitPrintJob()");
             } else {
                 onlineBtn.classList.add('border-blue-500', 'bg-blue-50', 'text-blue-700');
                 cashBtn.classList.remove('border-blue-500', 'bg-blue-50', 'text-blue-700');
                 upiBox.classList.remove('hidden');
+                
+                // Show Pay options first
+                actionBtn.innerText = "Proceed to Pay";
+                actionBtn.setAttribute("onclick", "generatePayment()");
                 calculateCost();
             }
         }
 
-        // --- 5. SUBMIT TO THE SKY BOX ---
+        // --- 5. GENERATE HYBRID PAYMENT (LINKS & QR) ---
+        function generatePayment() {
+            if (finalCost <= 0) return;
+
+            const actionBtn = document.getElementById('actionBtn');
+            const paymentBox = document.getElementById('upiRedirectBox');
+            const qrImage = document.getElementById('qrImage');
+
+            const cleanShopName = encodeURIComponent(SHOP_NAME);
+            const formattedAmount = finalCost.toFixed(2);
+            
+            // Generate QR Code URL using free QR generation API
+            const upiString = `upi://pay?pa=${UPI_ID}&pn=${cleanShopName}&am=${formattedAmount}&cu=INR&tn=CloudPrint`;
+            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(upiString)}`;
+            qrImage.src = qrUrl;
+
+            // Generate direct App Links (for iOS & Android compatibility)
+            const phonepeUrl = `phonepe://pay?pa=${UPI_ID}&pn=${cleanShopName}&am=${formattedAmount}&cu=INR&tn=CloudPrint`;
+            document.getElementById('phonepeLink').href = phonepeUrl;
+
+            const paytmUrl = `paytmmp://pay?pa=${UPI_ID}&pn=${cleanShopName}&am=${formattedAmount}&cu=INR&tn=CloudPrint`;
+            document.getElementById('paytmLink').href = paytmUrl;
+
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+            const gpayScheme = isIOS ? "gpay://upi/pay" : "tez://upi/pay";
+            const gpayUrl = `${gpayScheme}?pa=${UPI_ID}&pn=${cleanShopName}&am=${formattedAmount}&cu=INR&tn=CloudPrint`;
+            document.getElementById('gpayLink').href = gpayUrl;
+
+            paymentBox.classList.remove('hidden');
+
+            // Change button behavior to Upload/Confirm once clicked
+            actionBtn.innerText = "Confirm Payment & Order";
+            actionBtn.setAttribute("onclick", "submitPrintJob()");
+        }
+
+        // --- 6. SUBMIT TO DATABASE QUEUE ---
         async function submitPrintJob() {
             const name = document.getElementById('custName').value.trim();
             const statusMsg = document.getElementById('statusMsg');
@@ -240,7 +313,7 @@
                     filename: selectedFile.name,
                     copies: parseInt(document.getElementById('copies').value) || 1,
                     color: document.getElementById('colorMode').value === "true",
-                    status: 'Pending Approval', // <--- Saved as Pending Approval!
+                    status: 'Pending Approval',
                     payment_status: paymentMethod === "Online" ? `UPI App Pay (₹${finalCost.toFixed(2)})` : 'Cash at Shop'
                 }]);
 
