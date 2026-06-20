@@ -256,11 +256,13 @@
             // 2. Save job parameters to database
             const paymentText = paymentMethod === "Online" ? `UPI App Pay (₹${finalCost.toFixed(2)})` : 'Cash at Shop';
             
+           // Save job parameters to database
             const { error: dbError } = await supabaseClient
                 .from('print_jobs')
                 .insert([{
                     file_url: urlData.publicUrl,
                     filename: selectedFile.name,
+                    customer_name: name, // <--- Add this line!
                     copies: parseInt(document.getElementById('copies').value) || 1,
                     color: document.getElementById('colorMode').value === "true",
                     status: 'Pending Approval',
