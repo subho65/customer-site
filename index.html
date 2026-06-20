@@ -1,114 +1,261 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quick Print Shop</title>
+    <title>Quick Print Spot</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-
-<body class="bg-gray-100 min-h-screen flex flex-col items-center p-4">
-    <div class="max-w-md w-full bg-white p-6 rounded-lg shadow-md mt-10">
-        <h2 class="text-2xl font-bold mb-4 text-center text-blue-600">Scan & Print</h2>
-
-        <!-- File Input -->
+<body class="bg-slate-100 min-h-screen flex flex-col items-center justify-center p-4">
+    <div class="max-w-md w-full bg-white p-6 rounded-2xl shadow-xl border border-slate-200">
+        <h2 class="text-2xl font-bold mb-4 text-center text-blue-600">🖨️ Cloud Print Spot</h2>
+        
+        <!-- Customer Name Input -->
         <div class="mb-4">
-            <label class="block text-gray-700 font-medium mb-2">Upload PDF File</label>
-            <input type="file" id="fileInput" accept="application/pdf" class="w-full p-2 border rounded">
+            <label class="block text-slate-700 font-semibold mb-1">Your Name</label>
+            <input type="text" id="custName" placeholder="Enter your name" class="w-full p-2 border border-slate-300 rounded-lg">
         </div>
 
-        <!-- Print Options -->
-        <div class="mb-4 grid grid-cols-2 gap-4">
-            <div>
-                <label class="block text-gray-700 text-sm mb-1">Color Mode</label>
-                <select id="colorMode" class="w-full p-2 border rounded">
-                    <option value="false">Black & White</option>
-                    <option value="true">Color</option>
-                </select>
-            </div>
-            <div>
-                <label class="block text-gray-700 text-sm mb-1">Copies</label>
-                <input type="number" id="copies" value="1" min="1" class="w-full p-2 border rounded">
-            </div>
+        <!-- File Selector -->
+        <div class="mb-4">
+            <label class="block text-slate-700 font-semibold mb-2">Select PDF, PNG, or JPG</label>
+            <input type="file" id="fileInput" accept="application/pdf, image/png, image/jpeg" class="w-full p-2 border border-slate-300 rounded-lg">
         </div>
 
-        <button onclick="submitPrintJob()" id="submitBtn"
-            class="w-full bg-blue-600 text-white p-3 rounded font-semibold hover:bg-blue-700 transition">
-            Submit Print Job
-        </button>
-        <p id="statusMsg" class="mt-4 text-center text-sm font-medium text-gray-600"></p>
+        <!-- Visual Preview Box -->
+        <div id="previewContainer" class="hidden mb-4 p-2 border rounded-lg bg-slate-50 flex flex-col items-center">
+            <p class="text-xs text-slate-500 mb-1">File Preview:</p>
+            <img id="imagePreview" class="hidden max-h-48 rounded object-contain border" src="" alt="Image Preview">
+            <canvas id="pdfPreview" class="hidden max-h-48 rounded border"></canvas>
+            <p class="text-xs font-semibold text-blue-600 mt-2">Total Pages: <span id="pageCountDisplay">1</span></p>
+        </div>
+
+        <!-- Print Options (Visible after file selection) -->
+        <div id="printOptions" class="hidden space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-slate-600 text-sm mb-1">Color Mode</label>
+                    <select id="colorMode" onchange="calculateCost()" class="w-full p-2 border rounded-lg bg-white">
+                        <option value="false">Black & White (Grayscale)</option>
+                        <option value="true">Color</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-slate-600 text-sm mb-1">Copies</label>
+                    <input type="number" id="copies" value="1" min="1" onchange="calculateCost()" class="w-full p-2 border rounded-lg">
+                </div>
+            </div>
+
+            <!-- Pricing Box -->
+            <div class="p-3 bg-slate-900 text-white rounded-xl flex justify-between items-center">
+                <span class="font-semibold text-md">Total Cost:</span>
+                <span class="text-xl font-bold text-green-400">₹<span id="priceDisplay">0.00</span></span>
+            </div>
+
+            <!-- Payment Method Selector -->
+            <div>
+                <label class="block text-slate-700 font-semibold mb-2">Select Payment Method</label>
+                <div class="grid grid-cols-2 gap-4">
+                    <button type="button" onclick="setPaymentMethod('Cash')" id="payCashBtn" class="p-3 border-2 rounded-xl text-center font-bold border-slate-300 text-slate-700 bg-white">
+                        Pay Cash at Counter
+                    </button>
+                    <button type="button" onclick="setPaymentMethod('Online')" id="payOnlineBtn" class="p-3 border-2 rounded-xl text-center font-bold border-slate-300 text-slate-700 bg-white">
+                        Pay Online (UPI)
+                    </button>
+                </div>
+            </div>
+
+            <!-- Mobile UPI Launch Box -->
+            <div id="upiRedirectBox" class="hidden flex flex-col items-center p-4 border border-blue-200 bg-blue-50 rounded-xl">
+                <p class="text-sm font-semibold text-blue-800 mb-2">Complete payment inside your UPI app:</p>
+                <a id="upiPayLink" href="#" class="w-full bg-green-600 text-white p-3 rounded-lg text-center font-bold shadow hover:bg-green-700 block transition">
+                    📱 Open Payment App (Pay ₹<span id="upiAmountText">0</span>)
+                </a>
+                <p class="text-xs text-slate-500 mt-2 text-center">Tapping this button launches Google Pay, Paytm, or PhonePe automatically on your phone.</p>
+            </div>
+
+            <!-- Submit Order -->
+            <button onclick="submitPrintJob()" id="submitBtn" class="w-full bg-blue-600 text-white p-3 rounded-xl font-bold hover:bg-blue-700 transition">
+                Place Print Order
+            </button>
+        </div>
+        <p id="statusMsg" class="mt-4 text-center text-sm font-medium text-slate-600"></p>
     </div>
 
     <script>
-        // REPLACE WITH YOUR ACTUAL DEPLOYED SUPABASE CREDENTIALS
-        const SUPABASE_URL = "https://zokjpxvwzmhiapkeifen.supabase.co";
+        // --- 1. CONFIGURATION ---
+        const SUPABASE_URL = "https://zokjpxvwzmhiapkeifen.supabase.co"; 
         const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpva2pweHZ3em1oaWFwa2VpZmVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5MTA5OTIsImV4cCI6MjA5NzQ4Njk5Mn0.XgvacQ3KXx5F1EusaKw_OcX6c5Q88vjM2xlHnJFS7GM";
+        const UPI_ID = "your_shop_upi_vpa@okaxis"; // <-- Replace with your real UPI ID
+        const SHOP_NAME = "Your Shop Name";
 
-            // Fix: We changed the variable name here to 'supabaseClient'
-            const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const BW_RATE = 2.00;
+        const COLOR_RATE = 10.00;
 
-            async function submitPrintJob() {
-            const fileInput = document.getElementById('fileInput');
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+        let totalPages = 1;
+        let finalCost = 0;
+        let selectedFile = null;
+        let paymentMethod = "";
+
+        // --- 2. SELECT FILE & GENERATE VISUAL PREVIEW ---
+        document.getElementById('fileInput').addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            selectedFile = file;
+            totalPages = 1; // Reset default to 1 for images
+
+            const imgPreview = document.getElementById('imagePreview');
+            const pdfPreview = document.getElementById('pdfPreview');
+            const previewContainer = document.getElementById('previewContainer');
+            
+            imgPreview.classList.add('hidden');
+            pdfPreview.classList.add('hidden');
+            previewContainer.classList.remove('hidden');
+
+            // If it is an image
+            if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    imgPreview.src = e.target.result;
+                    imgPreview.classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+                document.getElementById('pageCountDisplay').innerText = "1 (Image)";
+                document.getElementById('printOptions').classList.remove('hidden');
+                calculateCost();
+            } 
+            // If it is a PDF
+            else if (file.type === 'application/pdf') {
+                const fileReader = new FileReader();
+                fileReader.onload = async function() {
+                    const typedarray = new Uint8Array(this.result);
+                    try {
+                        const pdf = await pdfjsLib.getDocument(typedarray).promise;
+                        totalPages = pdf.numPages;
+                        document.getElementById('pageCountDisplay').innerText = totalPages;
+
+                        // Render page 1 to canvas for preview
+                        const page = await pdf.getPage(1);
+                        const viewport = page.getViewport({ scale: 0.5 });
+                        const canvas = pdfPreview;
+                        const context = canvas.getContext('2d');
+                        canvas.height = viewport.height;
+                        canvas.width = viewport.width;
+
+                        await page.render({ canvasContext: context, viewport: viewport }).promise;
+                        pdfPreview.classList.remove('hidden');
+                        document.getElementById('printOptions').classList.remove('hidden');
+                        calculateCost();
+                    } catch (err) {
+                        alert("Error reading PDF file!");
+                    }
+                };
+                fileReader.readAsArrayBuffer(file);
+            }
+        });
+
+        // --- 3. DYNAMIC CALCULATE PRICE ---
+        function calculateCost() {
             const colorMode = document.getElementById('colorMode').value === "true";
-            const copies = parseInt(document.getElementById('copies').value);
+            const copies = parseInt(document.getElementById('copies').value) || 1;
+            const rate = colorMode ? COLOR_RATE : BW_RATE;
+            finalCost = totalPages * copies * rate;
+            document.getElementById('priceDisplay').innerText = finalCost.toFixed(2);
+            document.getElementById('upiAmountText').innerText = finalCost.toFixed(2);
+
+            // Re-generate UPI payment intent link if active
+            if (paymentMethod === "Online") {
+                const upiUrl = `upi://pay?pa=${UPI_ID}&pn=${encodeURIComponent(SHOP_NAME)}&am=${finalCost.toFixed(2)}&cu=INR&tn=CloudPrint`;
+                document.getElementById('upiPayLink').href = upiUrl;
+            }
+        }
+
+        // --- 4. SELECT PAYMENT WAY ---
+        function setPaymentMethod(method) {
+            paymentMethod = method;
+            const cashBtn = document.getElementById('payCashBtn');
+            const onlineBtn = document.getElementById('payOnlineBtn');
+            const upiBox = document.getElementById('upiRedirectBox');
+
+            if (method === "Cash") {
+                cashBtn.classList.add('border-blue-500', 'bg-blue-50', 'text-blue-700');
+                onlineBtn.classList.remove('border-blue-500', 'bg-blue-50', 'text-blue-700');
+                upiBox.classList.add('hidden');
+            } else {
+                onlineBtn.classList.add('border-blue-500', 'bg-blue-50', 'text-blue-700');
+                cashBtn.classList.remove('border-blue-500', 'bg-blue-50', 'text-blue-700');
+                upiBox.classList.remove('hidden');
+                calculateCost();
+            }
+        }
+
+        // --- 5. SUBMIT TO THE SKY BOX ---
+        async function submitPrintJob() {
+            const name = document.getElementById('custName').value.trim();
             const statusMsg = document.getElementById('statusMsg');
             const submitBtn = document.getElementById('submitBtn');
 
-            if (!fileInput.files.length) {
-                alert("Please select a PDF file first.");
-            return;
+            if (!name) {
+                alert("Please enter your name first!");
+                return;
+            }
+            if (!paymentMethod) {
+                alert("Please choose a payment method!");
+                return;
             }
 
-            const file = fileInput.files[0];
-            const fileName = `${Date.now()}_${file.name}`;
-            
             submitBtn.disabled = true;
-            statusMsg.innerText = "Uploading to cloud...";
+            statusMsg.innerText = "Uploading file to cloud folder...";
 
-            // Fix: Changed 'supabase.storage' to 'supabaseClient.storage'
-            const { data: uploadData, error: uploadError } = await supabaseClient.storage
+            const fileName = `${Date.now()}_${selectedFile.name}`;
+
+            // Upload actual file to storage bucket
+            const { error: uploadError } = await supabaseClient.storage
                 .from('print-files')
-                .upload(fileName, file);
+                .upload(fileName, selectedFile);
 
             if (uploadError) {
-                console.error("Upload error details:", uploadError);
-                statusMsg.innerText = "Upload failed!";
+                statusMsg.innerText = "File upload failed!";
                 submitBtn.disabled = false;
                 return;
             }
 
-            // Fix: Changed 'supabase.storage' to 'supabaseClient.storage'
             const { data: urlData } = supabaseClient.storage
                 .from('print-files')
                 .getPublicUrl(fileName);
 
-            const fileUrl = urlData.publicUrl;
+            statusMsg.innerText = "Adding order to counter dashboard...";
 
-            // Fix: Changed 'supabase.from' to 'supabaseClient.from'
-            statusMsg.innerText = "Adding to shop queue...";
+            // Save job to database with status: "Pending Approval"
             const { error: dbError } = await supabaseClient
                 .from('print_jobs')
                 .insert([{
-                    file_url: fileUrl,
-                    filename: file.name,
-                    copies: copies,
-                    color: colorMode,
-                    status: 'Ready to Print',
-                    payment_status: 'Cash at Counter'
+                    file_url: urlData.publicUrl,
+                    filename: selectedFile.name,
+                    copies: parseInt(document.getElementById('copies').value) || 1,
+                    color: document.getElementById('colorMode').value === "true",
+                    status: 'Pending Approval', // <--- Saved as Pending Approval!
+                    payment_status: paymentMethod === "Online" ? `UPI App Pay (₹${finalCost.toFixed(2)})` : 'Cash at Shop'
                 }]);
 
             if (dbError) {
-                console.error("Database error details:", dbError);
-                statusMsg.innerText = "Database error! Please try again.";
+                console.error(dbError);
+                statusMsg.innerText = "Error queueing your order.";
             } else {
-                statusMsg.innerText = "File uploaded! Please ask shopkeeper to print.";
-                fileInput.value = "";
+                statusMsg.innerHTML = "🎉 <b class='text-green-600'>Order Placed!</b> Tell the counter your name (<b>" + name + "</b>).";
+                document.getElementById('printOptions').classList.add('hidden');
+                document.getElementById('previewContainer').classList.add('hidden');
+                document.getElementById('fileInput').value = "";
+                document.getElementById('custName').value = "";
             }
             submitBtn.disabled = false;
         }
     </script>
 </body>
-
 </html>
