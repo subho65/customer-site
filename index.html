@@ -4,12 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quick Print Spot</title>
-    <!-- Supabase, PDF.js, and Tailwind CSS -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Razorpay Checkout SDK -->
-    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 </head>
 <body class="bg-slate-100 min-h-screen flex flex-col items-center justify-center p-4">
     <div class="max-w-md w-full bg-white p-6 rounded-2xl shadow-xl border border-slate-200">
@@ -61,13 +58,22 @@
             <div>
                 <label class="block text-slate-700 font-semibold mb-2">Select Payment Method</label>
                 <div class="grid grid-cols-2 gap-4">
-                    <button type="button" onclick="setPaymentMethod('Cash')" id="payCashBtn" class="p-3 border-2 rounded-xl text-center font-bold border-slate-300 text-slate-700 bg-white hover:border-slate-400 transition">
+                    <button type="button" onclick="setPaymentMethod('Cash')" id="payCashBtn" class="p-3 border-2 rounded-xl text-center font-bold border-slate-300 text-slate-700 bg-white">
                         Pay Cash at Counter
                     </button>
-                    <button type="button" onclick="setPaymentMethod('Online')" id="payOnlineBtn" class="p-3 border-2 rounded-xl text-center font-bold border-slate-300 text-slate-700 bg-white hover:border-slate-400 transition">
-                        Pay Online (Razorpay)
+                    <button type="button" onclick="setPaymentMethod('Online')" id="payOnlineBtn" class="p-3 border-2 rounded-xl text-center font-bold border-slate-300 text-slate-700 bg-white">
+                        Pay Online (UPI)
                     </button>
                 </div>
+            </div>
+
+            <!-- Mobile UPI Launch Box -->
+            <div id="upiRedirectBox" class="hidden flex flex-col items-center p-4 border border-blue-200 bg-blue-50 rounded-xl">
+                <p class="text-sm font-semibold text-blue-800 mb-2">Complete payment inside your UPI app:</p>
+                <a id="upiPayLink" href="#" class="w-full bg-green-600 text-white p-3 rounded-lg text-center font-bold shadow hover:bg-green-700 block transition">
+                    📱 Open Payment App (Pay ₹<span id="upiAmountText">0</span>)
+                </a>
+                <p class="text-xs text-slate-500 mt-2 text-center">Tapping this button launches Google Pay, Paytm, or PhonePe automatically on your phone.</p>
             </div>
 
             <!-- Submit Order -->
@@ -82,9 +88,7 @@
         // --- 1. CONFIGURATION ---
         const SUPABASE_URL = "https://zokjpxvwzmhiapkeifen.supabase.co"; 
         const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpva2pweHZ3em1oaWFwa2VpZmVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5MTA5OTIsImV4cCI6MjA5NzQ4Njk5Mn0.XgvacQ3KXx5F1EusaKw_OcX6c5Q88vjM2xlHnJFS7GM";
-        
-        // Configured with your provided Test Key ID
-        const RAZORPAY_KEY_ID = "rzp_test_T3nkgF0kb1m4eA"; 
+        const UPI_ID = "7797440385@upi"; // <-- Replace with your real UPI ID
         const SHOP_NAME = "Subhojati Dutta";
 
         const BW_RATE = 2.00;
@@ -163,6 +167,13 @@
             const rate = colorMode ? COLOR_RATE : BW_RATE;
             finalCost = totalPages * copies * rate;
             document.getElementById('priceDisplay').innerText = finalCost.toFixed(2);
+            document.getElementById('upiAmountText').innerText = finalCost.toFixed(2);
+
+            // Re-generate UPI payment intent link if active
+            if (paymentMethod === "Online") {
+                const upiUrl = `upi://pay?pa=${UPI_ID}&pn=${encodeURIComponent(SHOP_NAME)}&am=${finalCost.toFixed(2)}&cu=INR&tn=CloudPrint`;
+                document.getElementById('upiPayLink').href = upiUrl;
+            }
         }
 
         // --- 4. SELECT PAYMENT WAY ---
@@ -170,18 +181,21 @@
             paymentMethod = method;
             const cashBtn = document.getElementById('payCashBtn');
             const onlineBtn = document.getElementById('payOnlineBtn');
+            const upiBox = document.getElementById('upiRedirectBox');
 
             if (method === "Cash") {
                 cashBtn.classList.add('border-blue-500', 'bg-blue-50', 'text-blue-700');
                 onlineBtn.classList.remove('border-blue-500', 'bg-blue-50', 'text-blue-700');
+                upiBox.classList.add('hidden');
             } else {
                 onlineBtn.classList.add('border-blue-500', 'bg-blue-50', 'text-blue-700');
                 cashBtn.classList.remove('border-blue-500', 'bg-blue-50', 'text-blue-700');
+                upiBox.classList.remove('hidden');
                 calculateCost();
             }
         }
 
-        // --- 5. SUBMIT ORDER FLOW ---
+        // --- 5. SUBMIT TO THE SKY BOX ---
         async function submitPrintJob() {
             const name = document.getElementById('custName').value.trim();
             const statusMsg = document.getElementById('statusMsg');
@@ -195,140 +209,52 @@
                 alert("Please choose a payment method!");
                 return;
             }
-            if (!selectedFile) {
-                alert("Please select a file first!");
+
+            submitBtn.disabled = true;
+            statusMsg.innerText = "Uploading file to cloud folder...";
+
+            const fileName = `${Date.now()}_${selectedFile.name}`;
+
+            // Upload actual file to storage bucket
+            const { error: uploadError } = await supabaseClient.storage
+                .from('print-files')
+                .upload(fileName, selectedFile);
+
+            if (uploadError) {
+                statusMsg.innerText = "File upload failed!";
+                submitBtn.disabled = false;
                 return;
             }
 
-            submitBtn.disabled = true;
+            const { data: urlData } = supabaseClient.storage
+                .from('print-files')
+                .getPublicUrl(fileName);
 
-            if (paymentMethod === "Cash") {
-                // Flow for offline/cash payment
-                statusMsg.innerText = "Uploading file to cloud folder...";
-                const fileName = `${Date.now()}_${selectedFile.name}`;
+            statusMsg.innerText = "Adding order to counter dashboard...";
 
-                const { error: uploadError } = await supabaseClient.storage
-                    .from('print-files')
-                    .upload(fileName, selectedFile);
+            // Save job to database with status: "Pending Approval"
+            const { error: dbError } = await supabaseClient
+                .from('print_jobs')
+                .insert([{
+                    file_url: urlData.publicUrl,
+                    filename: selectedFile.name,
+                    copies: parseInt(document.getElementById('copies').value) || 1,
+                    color: document.getElementById('colorMode').value === "true",
+                    status: 'Pending Approval', // <--- Saved as Pending Approval!
+                    payment_status: paymentMethod === "Online" ? `UPI App Pay (₹${finalCost.toFixed(2)})` : 'Cash at Shop'
+                }]);
 
-                if (uploadError) {
-                    statusMsg.innerText = "File upload failed!";
-                    submitBtn.disabled = false;
-                    return;
-                }
-
-                const { data: urlData } = supabaseClient.storage
-                    .from('print-files')
-                    .getPublicUrl(fileName);
-
-                statusMsg.innerText = "Adding order to counter dashboard...";
-
-                const { error: dbError } = await supabaseClient
-                    .from('print_jobs')
-                    .insert([{
-                        file_url: urlData.publicUrl,
-                        filename: selectedFile.name,
-                        copies: parseInt(document.getElementById('copies').value) || 1,
-                        color: document.getElementById('colorMode').value === "true",
-                        status: 'Pending Approval',
-                        payment_status: 'Cash at Shop'
-                    }]);
-
-                if (dbError) {
-                    console.error(dbError);
-                    statusMsg.innerText = "Error queueing your order.";
-                } else {
-                    statusMsg.innerHTML = "🎉 <b class='text-green-600'>Order Placed!</b> Tell the counter your name (<b>" + name + "</b>).";
-                    resetForm();
-                }
-                submitBtn.disabled = false;
-
+            if (dbError) {
+                console.error(dbError);
+                statusMsg.innerText = "Error queueing your order.";
             } else {
-                // Razorpay Online Integration Flow
-                statusMsg.innerText = "Preparing payment portal...";
-
-                const options = {
-                    key: RAZORPAY_KEY_ID, 
-                    amount: Math.round(finalCost * 100), // Razorpay accepts payments in subunits (paise)
-                    currency: "INR",
-                    name: SHOP_NAME,
-                    description: `Print Job: ${selectedFile.name}`,
-                    prefill: {
-                        name: name
-                    },
-                    theme: {
-                        color: "#2563EB" // Matches Tailwind's blue-600
-                    },
-                    handler: async function (response) {
-                        // This callback executes only after successful transaction verification
-                        statusMsg.innerText = "Payment verification successful. Uploading print file...";
-
-                        const fileName = `${Date.now()}_${selectedFile.name}`;
-                        
-                        // 1. Upload to Supabase bucket
-                        const { error: uploadError } = await supabaseClient.storage
-                            .from('print-files')
-                            .upload(fileName, selectedFile);
-
-                        if (uploadError) {
-                            statusMsg.innerHTML = `<span class='text-red-600 font-bold'>Upload Failed!</span> Please show this screen to the administrator. Payment ID: <b>${response.razorpay_payment_id}</b>`;
-                            submitBtn.disabled = false;
-                            return;
-                        }
-
-                        // 2. Fetch public URL
-                        const { data: urlData } = supabaseClient.storage
-                            .from('print-files')
-                            .getPublicUrl(fileName);
-
-                        statusMsg.innerText = "Adding order to dashboard queue...";
-
-                        // 3. Update status in print_jobs database
-                        const { error: dbError } = await supabaseClient
-                            .from('print_jobs')
-                            .insert([{
-                                file_url: urlData.publicUrl,
-                                filename: selectedFile.name,
-                                copies: parseInt(document.getElementById('copies').value) || 1,
-                                color: document.getElementById('colorMode').value === "true",
-                                status: 'Pending Approval',
-                                payment_status: `Paid Online (Razorpay ID: ${response.razorpay_payment_id})`
-                            }]);
-
-                        if (dbError) {
-                            console.error(dbError);
-                            statusMsg.innerHTML = `<span class='text-red-600 font-bold'>Order registration error!</span> Contact support with Payment ID: <b>${response.razorpay_payment_id}</b>`;
-                        } else {
-                            statusMsg.innerHTML = "🎉 <b class='text-green-600'>Order Placed & Paid!</b> Mention your name (<b>" + name + "</b>) at the counter.";
-                            resetForm();
-                        }
-                        submitBtn.disabled = false;
-                    },
-                    modal: {
-                        ondismiss: function () {
-                            statusMsg.innerText = "Payment window closed.";
-                            submitBtn.disabled = false;
-                        }
-                    }
-                };
-
-                const rzp = new Razorpay(options);
-                rzp.open();
+                statusMsg.innerHTML = "🎉 <b class='text-green-600'>Order Placed!</b> Tell the counter your name (<b>" + name + "</b>).";
+                document.getElementById('printOptions').classList.add('hidden');
+                document.getElementById('previewContainer').classList.add('hidden');
+                document.getElementById('fileInput').value = "";
+                document.getElementById('custName').value = "";
             }
-        }
-
-        // Helper to clear inputs and state on success
-        function resetForm() {
-            document.getElementById('printOptions').classList.add('hidden');
-            document.getElementById('previewContainer').classList.add('hidden');
-            document.getElementById('fileInput').value = "";
-            document.getElementById('custName').value = "";
-            paymentMethod = "";
-            
-            const cashBtn = document.getElementById('payCashBtn');
-            const onlineBtn = document.getElementById('payOnlineBtn');
-            cashBtn.classList.remove('border-blue-500', 'bg-blue-50', 'text-blue-700');
-            onlineBtn.classList.remove('border-blue-500', 'bg-blue-50', 'text-blue-700');
+            submitBtn.disabled = false;
         }
     </script>
 </body>
