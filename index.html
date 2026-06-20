@@ -4,65 +4,80 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quick Print Spot</title>
-    <!-- Tailwind CSS, Supabase and PDF.js -->
+    <!-- Tailwind CSS, Supabase, PDF.js, jsPDF, and Cropper.js -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-100 min-h-screen flex flex-col items-center justify-center p-4">
     <div class="max-w-md w-full bg-white p-6 rounded-2xl shadow-xl border border-slate-200">
         <h2 class="text-2xl font-bold mb-4 text-center text-blue-600">🖨️ Cloud Print Spot</h2>
         
-        <!-- Interactive Form Container -->
-        <div id="formSection">
-            <!-- Customer Name Input -->
-            <div class="mb-4">
+        <!-- Interactive Form Section -->
+        <div id="formSection" class="space-y-4">
+            <!-- Customer Name -->
+            <div>
                 <label class="block text-slate-700 font-semibold mb-1">Your Name</label>
                 <input type="text" id="custName" placeholder="Enter your name" class="w-full p-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
             </div>
 
-            <!-- File Selector -->
-            <div class="mb-4">
-                <label class="block text-slate-700 font-semibold mb-2">Select PDF, PNG, or JPG</label>
-                <input type="file" id="fileInput" accept="application/pdf, image/png, image/jpeg" class="w-full p-2 border border-slate-300 rounded-lg">
+            <!-- File Selector (Supports Multiple Files) -->
+            <div>
+                <label class="block text-slate-700 font-semibold mb-1">Select PDF or Images (Supports Multiple)</label>
+                <input type="file" id="fileInput" accept="application/pdf, image/png, image/jpeg" multiple class="w-full p-2 border border-slate-300 rounded-lg">
             </div>
 
-            <!-- Visual Preview Box -->
-            <div id="previewContainer" class="hidden mb-4 p-2 border rounded-lg bg-slate-50 flex flex-col items-center">
-                <p class="text-xs text-slate-500 mb-1">File Preview:</p>
-                <img id="imagePreview" class="hidden max-h-48 rounded object-contain border" src="" alt="Image Preview">
-                <canvas id="pdfPreview" class="hidden max-h-48 rounded border"></canvas>
-                <p class="text-xs font-semibold text-blue-600 mt-2">Total Pages: <span id="pageCountDisplay">1</span></p>
+            <!-- Image Cropping Queue Box -->
+            <div id="cropQueueBox" class="hidden space-y-2 p-3 bg-slate-50 border rounded-lg">
+                <p class="text-xs font-semibold text-slate-500">Selected Images (Click to Crop):</p>
+                <div id="imageList" class="space-y-2"></div>
             </div>
 
-            <!-- Print Options (Visible after file selection) -->
-            <div id="printOptions" class="hidden space-y-4">
+            <!-- PDF Page Counter Status (Visible only for PDFs) -->
+            <div id="pdfStatusBox" class="hidden p-3 bg-blue-50 rounded-lg text-blue-800 text-xs font-semibold">
+                📄 PDF detected: <span id="pageCountDisplay">0</span> page(s)
+            </div>
+
+            <!-- Print Settings Card -->
+            <div id="printOptions" class="hidden space-y-4 border-t pt-4">
                 <div class="grid grid-cols-2 gap-4">
                     <div>
                         <label class="block text-slate-600 text-sm mb-1">Color Mode</label>
-                        <select id="colorMode" onchange="calculateCost()" class="w-full p-2 border rounded-lg bg-white">
+                        <select id="colorMode" onchange="calculateCost()" class="w-full p-2 border rounded-lg bg-white text-sm">
                             <option value="false">Black & White (Grayscale)</option>
                             <option value="true">Color</option>
                         </select>
                     </div>
                     <div>
                         <label class="block text-slate-600 text-sm mb-1">Copies</label>
-                        <input type="number" id="copies" value="1" min="1" onchange="calculateCost()" class="w-full p-2 border rounded-lg">
+                        <input type="number" id="copies" value="1" min="1" onchange="calculateCost()" class="w-full p-2 border rounded-lg text-sm">
                     </div>
                 </div>
 
-                <!-- Pricing Box -->
+                <!-- Print Sides (Adjusts automatically for multi-files) -->
+                <div>
+                    <label class="block text-slate-600 text-sm mb-1">Print Layout</label>
+                    <select id="duplexMode" class="w-full p-2 border rounded-lg bg-white text-sm">
+                        <option value="simplex">Single-Sided (Separate Pages)</option>
+                        <option value="duplex">Both Sides (Front & Back of Page)</option>
+                    </select>
+                </div>
+
+                <!-- Pricing Display -->
                 <div class="p-3 bg-slate-900 text-white rounded-xl flex justify-between items-center">
                     <span class="font-semibold text-md">Total Cost:</span>
                     <span class="text-xl font-bold text-green-400">₹<span id="priceDisplay">0.00</span></span>
                 </div>
 
-                <!-- Payment Method Selector -->
+                <!-- Payment Methods -->
                 <div>
                     <label class="block text-slate-700 font-semibold mb-2">Select Payment Method</label>
                     <div class="grid grid-cols-2 gap-4">
                         <button type="button" onclick="setPaymentMethod('Cash')" id="payCashBtn" class="p-3 border-2 rounded-xl text-center font-bold border-slate-300 text-slate-700 bg-white">
-                            Pay Cash at Counter
+                            Pay Cash
                         </button>
                         <button type="button" onclick="setPaymentMethod('Online')" id="payOnlineBtn" class="p-3 border-2 rounded-xl text-center font-bold border-slate-300 text-slate-700 bg-white">
                             Pay Online (UPI)
@@ -70,29 +85,26 @@
                     </div>
                 </div>
 
-                <!-- Submit Button -->
                 <button onclick="submitPrintJob()" id="submitBtn" class="w-full bg-blue-600 text-white p-3 rounded-xl font-bold hover:bg-blue-700 transition">
                     Upload & Place Order
                 </button>
             </div>
         </div>
 
-        <!-- Success & Payment Screen (Visible after successful upload) -->
+        <!-- Success Screen -->
         <div id="successSection" class="hidden text-center space-y-4 py-4">
             <div class="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto text-3xl">✓</div>
-            <h3 class="text-xl font-bold text-slate-800">File Uploaded Successfully!</h3>
-            <p class="text-sm text-slate-600">Your document is registered under the name: <span id="successName" class="font-bold text-slate-900"></span></p>
+            <h3 class="text-xl font-bold text-slate-800">Files Uploaded Successfully!</h3>
+            <p class="text-sm text-slate-600">Your order is ready under name: <span id="successName" class="font-bold text-slate-900"></span></p>
 
-            <!-- Show QR if they selected Online Payment -->
             <div id="upiPaymentBox" class="hidden flex flex-col items-center p-4 border border-blue-200 bg-blue-50 rounded-xl space-y-3">
                 <p class="text-xs font-semibold text-blue-800">👉 Please scan this QR to pay ₹<span id="upiAmountText">0.00</span>:</p>
                 <img id="qrImage" class="w-44 h-44 bg-white border p-1 rounded-lg" src="" alt="UPI QR Code">
-                <p class="text-[10px] text-amber-600 font-semibold text-center">Once paid, walk up to the counter and request your printout.</p>
+                <p class="text-[10px] text-amber-600 font-semibold text-center">Once paid, ask the counter to print your document.</p>
             </div>
 
-            <!-- Show if they selected Cash Payment -->
             <div id="cashPaymentBox" class="hidden p-4 border border-amber-200 bg-amber-50 rounded-xl text-amber-800 text-sm font-semibold">
-                Please pay ₹<span id="cashAmountText">0.00</span> in cash at the counter to get your printout.
+                Please pay ₹<span id="cashAmountText">0.00</span> in cash at the counter.
             </div>
 
             <button onclick="resetForm()" class="text-xs text-blue-600 hover:underline">Upload another file</button>
@@ -101,12 +113,26 @@
         <p id="statusMsg" class="mt-4 text-center text-sm font-medium text-slate-600"></p>
     </div>
 
+    <!-- Image Cropper Modal popup -->
+    <div id="cropperModal" class="hidden fixed inset-0 bg-black/80 flex flex-col items-center justify-center p-4 z-50">
+        <div class="max-w-md w-full bg-white p-4 rounded-2xl flex flex-col items-center shadow-2xl">
+            <h4 class="text-sm font-semibold text-slate-700 mb-2">Adjust & Crop Image</h4>
+            <div class="w-full max-h-[60vh] overflow-hidden rounded-lg bg-slate-100 mb-4 flex items-center justify-center">
+                <img id="cropperImage" class="max-w-full max-h-[50vh]">
+            </div>
+            <div class="flex gap-4 w-full">
+                <button onclick="closeCropper()" class="flex-1 bg-slate-200 py-2 rounded-lg font-bold text-slate-700">Cancel</button>
+                <button onclick="applyCrop()" class="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold">Crop & Save</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // --- 1. CONFIGURATION ---
         const SUPABASE_URL = "https://zokjpxvwzmhiapkeifen.supabase.co"; 
         const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpva2pweHZ3em1oaWFwa2VpZmVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5MTA5OTIsImV4cCI6MjA5NzQ4Njk5Mn0.XgvacQ3KXx5F1EusaKw_OcX6c5Q88vjM2xlHnJFS7GM";
         
-        const UPI_ID = "your_upi_id@okaxis"; // <--- REPLACE WITH YOUR REAL UPI ID
+        const UPI_ID = "7797440385@upi"; // <--- REPLACE WITH YOUR REAL UPI ID
         const SHOP_NAME = "Smart Print Spot";
 
         const BW_RATE = 2.00;
@@ -117,37 +143,37 @@
 
         let totalPages = 1;
         let finalCost = 0;
-        let selectedFile = null;
         let paymentMethod = "";
+        
+        let isPdf = false;
+        let uploadedPdfFile = null;
 
-        // --- 2. SELECT FILE & GENERATE VISUAL PREVIEW ---
+        // Image Cropping State list
+        let rawImagesArray = []; 
+        let activeCropIndex = null;
+        let cropperInstance = null;
+
+        // --- 2. INPUT HANDLER ---
         document.getElementById('fileInput').addEventListener('change', async function(e) {
-            const file = e.target.files[0];
-            if (!file) return;
+            const files = Array.from(e.target.files);
+            if (files.length === 0) return;
 
-            selectedFile = file;
-            totalPages = 1;
+            // Reset States
+            rawImagesArray = [];
+            isPdf = false;
+            uploadedPdfFile = null;
+            document.getElementById('cropQueueBox').classList.add('hidden');
+            document.getElementById('pdfStatusBox').classList.add('hidden');
 
-            const imgPreview = document.getElementById('imagePreview');
-            const pdfPreview = document.getElementById('pdfPreview');
-            const previewContainer = document.getElementById('previewContainer');
-            
-            imgPreview.classList.add('hidden');
-            pdfPreview.classList.add('hidden');
-            previewContainer.classList.remove('hidden');
+            const firstFile = files[0];
 
-            if (file.type.startsWith('image/')) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    imgPreview.src = e.target.result;
-                    imgPreview.classList.remove('hidden');
-                };
-                reader.readAsDataURL(file);
-                document.getElementById('pageCountDisplay').innerText = "1 (Image)";
-                document.getElementById('printOptions').classList.remove('hidden');
-                setPaymentMethod('Online');
-            } 
-            else if (file.type === 'application/pdf') {
+            // A. If they uploaded a PDF (We only allow 1 PDF at a time)
+            if (firstFile.type === 'application/pdf') {
+                isPdf = true;
+                uploadedPdfFile = firstFile;
+                totalPages = 1;
+                document.getElementById('statusMsg').innerText = "Analyzing PDF...";
+
                 const fileReader = new FileReader();
                 fileReader.onload = async function() {
                     const typedarray = new Uint8Array(this.result);
@@ -155,27 +181,107 @@
                         const pdf = await pdfjsLib.getDocument(typedarray).promise;
                         totalPages = pdf.numPages;
                         document.getElementById('pageCountDisplay').innerText = totalPages;
-
-                        const page = await pdf.getPage(1);
-                        const viewport = page.getViewport({ scale: 0.5 });
-                        const canvas = pdfPreview;
-                        const context = canvas.getContext('2d');
-                        canvas.height = viewport.height;
-                        canvas.width = viewport.width;
-
-                        await page.render({ canvasContext: context, viewport: viewport }).promise;
-                        pdfPreview.classList.remove('hidden');
+                        document.getElementById('pdfStatusBox').classList.remove('hidden');
                         document.getElementById('printOptions').classList.remove('hidden');
+                        document.getElementById('statusMsg').innerText = "";
                         setPaymentMethod('Online');
                     } catch (err) {
                         alert("Error reading PDF file!");
+                        document.getElementById('statusMsg').innerText = "";
                     }
                 };
-                fileReader.readAsArrayBuffer(file);
+                fileReader.readAsArrayBuffer(firstFile);
+            } 
+            // B. If they uploaded Images (Can be multiple!)
+            else {
+                const imageFiles = files.filter(f => f.type.startsWith('image/'));
+                if (imageFiles.length === 0) return;
+
+                document.getElementById('statusMsg').innerText = "Loading images...";
+                totalPages = imageFiles.length; // 1 page per image
+
+                let loadCount = 0;
+                imageFiles.forEach((file, index) => {
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        rawImagesArray.push({
+                            id: index,
+                            name: file.name,
+                            originalUrl: event.target.result,
+                            croppedUrl: event.target.result // Default is uncropped
+                        });
+                        loadCount++;
+                        if (loadCount === imageFiles.length) {
+                            renderImageGrid();
+                            document.getElementById('cropQueueBox').classList.remove('hidden');
+                            document.getElementById('printOptions').classList.remove('hidden');
+                            document.getElementById('statusMsg').innerText = "";
+                            setPaymentMethod('Online');
+                        }
+                    };
+                    reader.readAsDataURL(file);
+                });
             }
         });
 
-        // --- 3. DYNAMIC CALCULATE PRICE ---
+        // --- 3. RENDER IMAGE LIST WITH CROP BUTTONS ---
+        function renderImageGrid() {
+            const imageList = document.getElementById('imageList');
+            imageList.innerHTML = "";
+
+            rawImagesArray.forEach((img, idx) => {
+                imageList.innerHTML += `
+                    <div class="flex items-center justify-between bg-white p-2 rounded-lg border shadow-sm">
+                        <div class="flex items-center space-x-2">
+                            <img src="${img.croppedUrl}" class="w-10 h-10 object-cover rounded border">
+                            <span class="text-xs font-semibold text-slate-700 truncate max-w-[150px]">${img.name}</span>
+                        </div>
+                        <button onclick="openCropper(${idx})" class="bg-blue-100 text-blue-600 hover:bg-blue-200 text-xs px-3 py-1.5 rounded-lg font-bold">
+                            ✂️ Crop
+                        </button>
+                    </div>
+                `;
+            });
+        }
+
+        // --- 4. CROPPER MODAL CONTROLLERS ---
+        function openCropper(index) {
+            activeCropIndex = index;
+            const modal = document.getElementById('cropperModal');
+            const cropImg = document.getElementById('cropperImage');
+            
+            cropImg.src = rawImagesArray[index].originalUrl;
+            modal.classList.remove('hidden');
+
+            // Initialize CropperJS with free aspect ratio
+            if (cropperInstance) cropperInstance.destroy();
+            cropperInstance = new Cropper(cropImg, {
+                viewMode: 1,
+                autoCropArea: 1,
+                responsive: true
+            });
+        }
+
+        function closeCropper() {
+            document.getElementById('cropperModal').classList.add('hidden');
+            if (cropperInstance) cropperInstance.destroy();
+        }
+
+        function applyCrop() {
+            if (!cropperInstance) return;
+
+            // Get cropped canvas data
+            const canvas = cropperInstance.getCroppedCanvas();
+            const croppedDataUrl = canvas.toDataURL('image/jpeg', 0.9);
+
+            // Save the cropped image back into our array
+            rawImagesArray[activeCropIndex].croppedUrl = croppedDataUrl;
+
+            closeCropper();
+            renderImageGrid();
+        }
+
+        // --- 5. DYNAMIC CALCULATE PRICE ---
         function calculateCost() {
             const colorMode = document.getElementById('colorMode').value === "true";
             const copies = parseInt(document.getElementById('copies').value) || 1;
@@ -184,39 +290,48 @@
             document.getElementById('priceDisplay').innerText = finalCost.toFixed(2);
         }
 
-        // --- 4. SELECT PAYMENT WAY (FIXED TO AVOID COLOR COLLISIONS) ---
+        // --- 6. SELECT PAYMENT WAY ---
         function setPaymentMethod(method) {
             paymentMethod = method;
             const cashBtn = document.getElementById('payCashBtn');
             const onlineBtn = document.getElementById('payOnlineBtn');
 
-            // Style classes
             const activeColors = ['border-blue-500', 'bg-blue-50', 'text-blue-700'];
             const inactiveColors = ['border-slate-300', 'text-slate-700', 'bg-white'];
 
             if (method === "Cash") {
-                // Style Cash Button as ACTIVE
                 cashBtn.classList.remove(...inactiveColors);
                 cashBtn.classList.add(...activeColors);
-
-                // Style Online Button as INACTIVE
                 onlineBtn.classList.remove(...activeColors);
                 onlineBtn.classList.add(...inactiveColors);
             } else {
-                // Style Online Button as ACTIVE
                 onlineBtn.classList.remove(...inactiveColors);
                 onlineBtn.classList.add(...activeColors);
-
-                // Style Cash Button as INACTIVE
                 cashBtn.classList.remove(...activeColors);
                 cashBtn.classList.add(...inactiveColors);
             }
-            
-            // Recalculate price
             calculateCost();
         }
 
-        // --- 5. UPLOAD FIRST, THEN GENERATE SUCCESS/QR ---
+        // --- 7. CONVERT IMAGES TO SINGLE PDF ---
+        function compileImagesToPDF() {
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('p', 'mm', 'a4'); // Standard portrait A4 PDF
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+
+            rawImagesArray.forEach((img, idx) => {
+                if (idx > 0) pdf.addPage();
+                
+                // Add cropped image stretched/padded nicely on A4
+                pdf.addImage(img.croppedUrl, 'JPEG', 10, 10, pdfWidth - 20, pdfHeight - 20);
+            });
+
+            const pdfBlob = pdf.output('blob');
+            return new File([pdfBlob], "compiled_images.pdf", { type: 'application/pdf' });
+        }
+
+        // --- 8. UPLOAD & SUBMIT PRINT ORDER ---
         async function submitPrintJob() {
             const name = document.getElementById('custName').value.trim();
             const statusMsg = document.getElementById('statusMsg');
@@ -232,17 +347,30 @@
             }
 
             submitBtn.disabled = true;
-            statusMsg.innerText = "Uploading file to secure cloud folder...";
+            statusMsg.innerText = "Compiling and uploading documents...";
 
-            const fileName = `${Date.now()}_${selectedFile.name}`;
+            let fileToUpload = null;
+            let displayFilename = "";
 
-            // 1. Upload actual file to Storage Bucket FIRST
+            if (isPdf) {
+                fileToUpload = uploadedPdfFile;
+                displayFilename = uploadedPdfFile.name;
+            } else {
+                // Compile images to a clean PDF in browser memory
+                fileToUpload = compileImagesToPDF();
+                displayFilename = "compiled_images.pdf";
+            }
+
+            const fileName = `${Date.now()}_${fileToUpload.name}`;
+
+            // Upload PDF file to Supabase Storage
             const { error: uploadError } = await supabaseClient.storage
                 .from('print-files')
-                .upload(fileName, selectedFile);
+                .upload(fileName, fileToUpload);
 
             if (uploadError) {
-                statusMsg.innerText = "File upload failed! Please try again.";
+                console.error(uploadError);
+                statusMsg.innerText = "Upload failed! Please check your internet connection.";
                 submitBtn.disabled = false;
                 return;
             }
@@ -251,32 +379,33 @@
                 .from('print-files')
                 .getPublicUrl(fileName);
 
-            statusMsg.innerText = "Registering order queue...";
+            statusMsg.innerText = "Connecting database queue...";
 
-            // 2. Save job parameters to database
+            const duplexSetting = document.getElementById('duplexMode').value;
             const paymentText = paymentMethod === "Online" ? `UPI App Pay (₹${finalCost.toFixed(2)})` : 'Cash at Shop';
-            
-           // Save job parameters to database
+
+            // Insert details into print_jobs
             const { error: dbError } = await supabaseClient
                 .from('print_jobs')
                 .insert([{
                     file_url: urlData.publicUrl,
-                    filename: selectedFile.name,
-                    customer_name: name, // <--- Add this line!
+                    filename: displayFilename,
+                    customer_name: name,
                     copies: parseInt(document.getElementById('copies').value) || 1,
                     color: document.getElementById('colorMode').value === "true",
+                    duplex: duplexSetting, // Simplex or Duplex
                     status: 'Pending Approval',
                     payment_status: paymentText
                 }]);
 
             if (dbError) {
                 console.error(dbError);
-                statusMsg.innerText = "Database error. Please check with shopkeeper.";
+                statusMsg.innerText = "Database error. Please check with counter.";
                 submitBtn.disabled = false;
                 return;
             }
 
-            // 3. Clear messages and swap UI to show success & payment
+            // Success Transition
             statusMsg.innerText = "";
             document.getElementById('formSection').classList.add('hidden');
             document.getElementById('successSection').classList.remove('hidden');
@@ -287,7 +416,6 @@
                 document.getElementById('cashPaymentBox').classList.add('hidden');
                 document.getElementById('upiAmountText').innerText = finalCost.toFixed(2);
                 
-                // Generate QR Code on screen for scanning
                 const upiString = `upi://pay?pa=${UPI_ID}&pn=${encodeURIComponent(SHOP_NAME)}&am=${finalCost.toFixed(2)}&cu=INR&tn=CloudPrint`;
                 const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(upiString)}`;
                 document.getElementById('qrImage').src = qrUrl;
@@ -298,40 +426,31 @@
             }
         }
 
-       // --- 7. COMPLETE FORM RESET (FIXED TO CLEAR MEMORY STACK) ---
+        // Reset all states
         function resetForm() {
-            // 1. Force-enable the upload button and reset its text
             const submitBtn = document.getElementById('submitBtn');
             submitBtn.disabled = false;
-            submitBtn.innerText = "Upload & Place Order";
             
-            // 2. Clear status messages
             document.getElementById('statusMsg').innerHTML = "";
-            
-            // 3. Swap the screens (Show input form, hide success box)
             document.getElementById('formSection').classList.remove('hidden');
             document.getElementById('successSection').classList.add('hidden');
             
-            // 4. Wipe input fields completely
             document.getElementById('fileInput').value = "";
             document.getElementById('custName').value = "";
             
-            // 5. Erase file memory from JavaScript
-            selectedFile = null;
             totalPages = 1;
             finalCost = 0;
             paymentMethod = "";
-            
-            // 6. Hide all previews and print option cards
+            isPdf = false;
+            uploadedPdfFile = null;
+            rawImagesArray = [];
+
             document.getElementById('previewContainer').classList.add('hidden');
             document.getElementById('printOptions').classList.add('hidden');
             document.getElementById('imagePreview').classList.add('hidden');
             document.getElementById('pdfPreview').classList.add('hidden');
-            
-            // Reset the canvas drawing area
-            const canvas = document.getElementById('pdfPreview');
-            const context = canvas.getContext('2d');
-            context.clearRect(0, 0, canvas.width, canvas.height);
+            document.getElementById('cropQueueBox').classList.add('hidden');
+            document.getElementById('pdfStatusBox').classList.add('hidden');
         }
     </script>
 </body>
