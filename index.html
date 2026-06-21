@@ -40,9 +40,9 @@
                     <p class="text-[11px] text-blue-100 font-medium">Instant Counter Prints</p>
                 </div>
             </div>
-            <!-- Dynamic status element selector -->
-            <span id="printerStatusBadge" class="bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2.5 py-1 rounded-full border border-emerald-500/30 flex items-center gap-1 transition-colors duration-300">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Checking...
+            <!-- Reverted to a static indicator -->
+            <span class="bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2.5 py-1 rounded-full border border-emerald-500/30 flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Online
             </span>
         </div>
 
@@ -217,12 +217,6 @@
                         <span class="text-xs text-blue-400 font-semibold" id="priceContext">Based on selection</span>
                     </div>
                     <span class="text-2xl font-black text-emerald-400">₹<span id="priceDisplay">0.00</span></span>
-                </div>
-
-                <!-- Printer Offline Warnings Banner inside printOptions panel -->
-                <div id="printerOfflineWarning" class="hidden p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex items-center space-x-2.5 text-amber-800 text-[11px] font-semibold leading-relaxed transition-all">
-                    <svg class="w-4 h-4 text-amber-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
-                    <span>Counter printer is currently offline. You can still upload files to print but output won't execute immediately.</span>
                 </div>
 
                 <!-- Payment Selection -->
@@ -736,7 +730,6 @@
         }
 
         // --- CONTEXT TOOLBAR ACTIONS ---
-        // Context toolbar triggers
         function triggerActiveCrop() {
             if (activeSelectedIdx !== null) {
                 openStandardCropper(activeSelectedIdx);
@@ -904,7 +897,6 @@
         }
 
         // --- 6. PASSPORT INPUT & LIVE A4 PREVIEW (6x6) ---
-        // Passport impressions manual configuration inputs
         function handleImpressionsInput() {
             const input = document.getElementById('passportImpressions');
             let val = parseInt(input.value);
@@ -1044,79 +1036,6 @@
             const pdfBlob = pdf.output('blob');
             return new File([pdfBlob], "passport_sheet.pdf", { type: 'application/pdf' });
         }
-
-        // --- 10. DYNAMIC PRINTER STATUS MONITORING ---
-        async function checkPrinterStatus() {
-            // Check browser status locally before sending query to prevent network errors
-            if (!navigator.onLine) {
-                updateOnlineBadge(false);
-                return;
-            }
-
-            try {
-                // Polls printer_status table for a heartbeat record (ID 1)
-                const { data, error } = await supabaseClient
-                    .from('printer_status')
-                    .select('is_online, last_seen')
-                    .eq('id', 1)
-                    .single();
-
-                if (error) {
-                    // Fallback to active online state if the database table is not established yet
-                    updateOnlineBadge(true);
-                    return;
-                }
-
-                if (data) {
-                    let isOnline = data.is_online;
-                    
-                    // Offline if local desktop agent has not reported within 45 seconds
-                    if (data.last_seen) {
-                        const lastSeenTime = new Date(data.last_seen).getTime();
-                        const differenceInSeconds = (Date.now() - lastSeenTime) / 1000;
-                        isOnline = differenceInSeconds < 45; 
-                    }
-                    
-                    updateOnlineBadge(isOnline);
-                }
-            } catch (err) {
-                console.warn("Heartbeat monitor connection exception:", err);
-                // Graceful fallback to prevent screen blocking
-                updateOnlineBadge(true);
-            }
-        }
-
-        function updateOnlineBadge(isOnline) {
-            const badge = document.getElementById('printerStatusBadge');
-            const warningBanner = document.getElementById('printerOfflineWarning');
-            if (!badge) return;
-
-            if (isOnline) {
-                badge.className = "bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2.5 py-1 rounded-full border border-emerald-500/30 flex items-center gap-1 transition-colors duration-300";
-                badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Online`;
-                if (warningBanner) warningBanner.classList.add('hidden');
-            } else {
-                badge.className = "bg-rose-500/20 text-rose-300 text-[10px] font-bold px-2.5 py-1 rounded-full border border-rose-500/30 flex items-center gap-1 transition-colors duration-300";
-                badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span> Offline`;
-                if (warningBanner) warningBanner.classList.remove('hidden');
-            }
-        }
-
-        // Native connection restoration listeners to instantly bypass the timer interval delay
-        window.addEventListener('online', () => {
-            showStatusBar("Reconnecting securely to database...");
-            checkPrinterStatus();
-            setTimeout(hideStatusBar, 1500);
-        });
-
-        window.addEventListener('offline', () => {
-            updateOnlineBadge(false);
-            showStatusBar("No local internet connection detected.");
-        });
-
-        // Initialize Background Heartbeat Poll every 8 seconds
-        setInterval(checkPrinterStatus, 8000);
-        checkPrinterStatus();
 
         // --- 11. SUBMIT & UPLOAD PROCESS ---
         async function submitPrintJob() {
