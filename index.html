@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quick Print Spot</title>
+    <title>Quick Print App</title>
     <!-- Tailwind CSS, Supabase, PDF.js, jsPDF, and Cropper.js -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
@@ -11,118 +11,195 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .custom-tab-active {
+            border-bottom-color: #2563eb;
+            color: #2563eb;
+        }
+        /* Passport visual grid styles */
+        .passport-grid-item {
+            aspect-ratio: 30 / 40;
+        }
+    </style>
 </head>
-<body class="bg-slate-100 min-h-screen flex flex-col items-center justify-center p-4">
-    <div class="max-w-md w-full bg-white p-6 rounded-2xl shadow-xl border border-slate-200">
-        <h2 class="text-2xl font-bold mb-4 text-center text-blue-600">🖨️ Cloud Print Spot</h2>
+<body class="bg-slate-50 min-h-screen flex flex-col items-center justify-start p-2 sm:p-6 text-slate-800">
+    <div class="max-w-md w-full bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden my-4">
         
-        <!-- Interactive Form Section -->
-        <div id="formSection" class="space-y-4">
-            <!-- Customer Name -->
-            <div>
-                <label class="block text-slate-700 font-semibold mb-1">Your Name</label>
-                <input type="text" id="custName" placeholder="Enter your name" class="w-full p-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <!-- App Header Banner -->
+        <div class="bg-gradient-to-r from-blue-600 to-indigo-700 p-6 text-white text-center">
+            <h1 class="text-2xl font-black tracking-tight flex items-center justify-center gap-2">
+                <span>🖨️</span> Smart Print Studio
+            </h1>
+            <p class="text-xs text-blue-100 mt-1">Upload, configure, pay, and print instantly</p>
+        </div>
+
+        <!-- Mode Navigation Tabs -->
+        <div class="flex border-b border-slate-200 bg-slate-50">
+            <button onclick="switchMode('document')" id="tabDoc" class="flex-1 py-3 text-center text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-blue-600 transition">
+                📄 Document / Photo
+            </button>
+            <button onclick="switchMode('passport')" id="tabPass" class="flex-1 py-3 text-center text-sm font-bold border-b-2 border-transparent text-slate-500 hover:text-blue-600 transition">
+                👤 Passport Studio
+            </button>
+        </div>
+
+        <!-- App Body -->
+        <div class="p-6">
+            
+            <!-- User Profile (Name Input) -->
+            <div class="mb-5">
+                <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Your Name</label>
+                <input type="text" id="custName" placeholder="Enter full name" class="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
             </div>
 
-            <!-- File Selector (Supports Multiple Files) -->
-            <div>
-                <label class="block text-slate-700 font-semibold mb-1">Select PDF or Images (Supports Multiple)</label>
-                <input type="file" id="fileInput" accept="application/pdf, image/png, image/jpeg" multiple class="w-full p-2 border border-slate-300 rounded-lg">
+            <!-- TAB 1: DOCUMENT / GENERAL PHOTO MODE -->
+            <div id="docModeSection" class="space-y-4">
+                <!-- Drop Zone -->
+                <div class="border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center hover:border-blue-500 transition cursor-pointer relative bg-slate-50">
+                    <input type="file" id="docFileInput" accept="application/pdf, image/png, image/jpeg" multiple class="absolute inset-0 opacity-0 cursor-pointer">
+                    <span class="text-3xl">📁</span>
+                    <p class="text-xs font-bold text-slate-600 mt-2">Tap to Select files</p>
+                    <p class="text-[10px] text-slate-400 mt-1">Supports PDF, PNG, JPG (Multiple allowed)</p>
+                </div>
+
+                <!-- PDF Status Information -->
+                <div id="pdfStatusBox" class="hidden p-3.5 bg-blue-50 border border-blue-100 rounded-xl text-blue-800 text-xs font-semibold flex justify-between items-center">
+                    <span>📄 PDF Document Uploaded:</span>
+                    <span class="bg-blue-200 px-2.5 py-0.5 rounded-full text-[10px]"><span id="pageCountDisplay">0</span> Page(s)</span>
+                </div>
+
+                <!-- Image List & Cropping Trigger -->
+                <div id="docCropBox" class="hidden space-y-2">
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Configure Image(s):</p>
+                    <div id="docImageList" class="space-y-2"></div>
+                </div>
+
+                <!-- Standard Layout Options for Images -->
+                <div id="imageLayoutPresetBox" class="hidden">
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">A4 Page Layout Preset</label>
+                    <select id="imageLayoutPreset" class="w-full p-2.5 border rounded-xl bg-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        <option value="fit">Fit to Page (Auto Scale & Center)</option>
+                        <option value="half">Half Page (A5 Scale)</option>
+                        <option value="id_card">Standard ID Card Size (85 x 54 mm)</option>
+                    </select>
+                </div>
             </div>
 
-            <!-- Image Cropping Queue Box -->
-            <div id="cropQueueBox" class="hidden space-y-2 p-3 bg-slate-50 border rounded-lg">
-                <p class="text-xs font-semibold text-slate-500">Selected Images (Click to Crop):</p>
-                <div id="imageList" class="space-y-2"></div>
+            <!-- TAB 2: PASSPORT PHOTO STUDIO MODE -->
+            <div id="passportModeSection" class="hidden space-y-4">
+                <div class="border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center hover:border-blue-500 transition cursor-pointer relative bg-slate-50">
+                    <input type="file" id="passportFileInput" accept="image/png, image/jpeg" class="absolute inset-0 opacity-0 cursor-pointer">
+                    <span class="text-3xl">📸</span>
+                    <p class="text-xs font-bold text-slate-600 mt-2">Upload Portrait Face Photo</p>
+                    <p class="text-[10px] text-slate-400 mt-1">Accepts PNG or JPG (Automatic 3:4 crop lock)</p>
+                </div>
+
+                <!-- Passport Quantity Slider & Preview -->
+                <div id="passportConfigBox" class="hidden space-y-4 border-t pt-4">
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="text-xs font-bold uppercase tracking-wider text-slate-500">Number of Impressions</label>
+                            <span id="passQuantityDisplay" class="text-sm font-black text-blue-600">36 Photos</span>
+                        </div>
+                        <input type="range" id="passportQuantity" min="1" max="36" value="36" oninput="updatePassportPreview()" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                    </div>
+
+                    <!-- Live Grid Preview (Matches 6x6 Layout) -->
+                    <div class="p-3 bg-slate-900 rounded-2xl">
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center mb-2">Live A4 Grid Layout (6x6)</p>
+                        <div id="passportPreviewGrid" class="grid grid-cols-6 gap-1 border border-slate-700 p-1.5 rounded-lg bg-slate-800">
+                            <!-- Generated dynamically in javascript -->
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <!-- PDF Page Counter Status (Visible only for PDFs) -->
-            <div id="pdfStatusBox" class="hidden p-3 bg-blue-50 rounded-lg text-blue-800 text-xs font-semibold">
-                📄 PDF detected: <span id="pageCountDisplay">0</span> page(s)
-            </div>
-
-            <!-- Print Settings Card -->
-            <div id="printOptions" class="hidden space-y-4 border-t pt-4">
+            <!-- MAIN GLOBAL SETTINGS BLOCK -->
+            <div id="globalSettingsBlock" class="hidden space-y-4 border-t pt-4 mt-4">
                 <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-slate-600 text-sm mb-1">Color Mode</label>
-                        <select id="colorMode" onchange="calculateCost()" class="w-full p-2 border rounded-lg bg-white text-sm">
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Color Mode</label>
+                        <select id="colorMode" onchange="calculateCost()" class="w-full p-2.5 border rounded-xl bg-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
                             <option value="false">Black & White (Grayscale)</option>
                             <option value="true">Color</option>
                         </select>
                     </div>
                     <div>
-                        <label class="block text-slate-600 text-sm mb-1">Copies</label>
-                        <input type="number" id="copies" value="1" min="1" onchange="calculateCost()" class="w-full p-2 border rounded-lg text-sm">
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Copies</label>
+                        <input type="number" id="copies" value="1" min="1" onchange="calculateCost()" class="w-full p-2.5 border rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
                     </div>
                 </div>
 
-                <!-- Print Sides (Adjusts automatically for multi-files) -->
-                <div>
-                    <label class="block text-slate-600 text-sm mb-1">Print Layout</label>
-                    <select id="duplexMode" class="w-full p-2 border rounded-lg bg-white text-sm">
+                <!-- Standard Duplex Mode Selector (Only used for document mode) -->
+                <div id="duplexContainer">
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Duplex (Sides)</label>
+                    <select id="duplexMode" class="w-full p-2.5 border rounded-xl bg-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
                         <option value="simplex">Single-Sided (Separate Pages)</option>
-                        <option value="duplex">Both Sides (Front & Back of Page)</option>
+                        <option value="duplex">Both Sides (Duplex Long Edge)</option>
                     </select>
                 </div>
 
-                <!-- Pricing Display -->
-                <div class="p-3 bg-slate-900 text-white rounded-xl flex justify-between items-center">
-                    <span class="font-semibold text-md">Total Cost:</span>
-                    <span class="text-xl font-bold text-green-400">₹<span id="priceDisplay">0.00</span></span>
+                <!-- Price Dashboard -->
+                <div class="p-4 bg-slate-950 text-white rounded-2xl flex justify-between items-center shadow-inner border border-slate-850">
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Total Price:</span>
+                    <span class="text-2xl font-black text-green-400">₹<span id="priceDisplay">0.00</span></span>
                 </div>
 
-                <!-- Payment Methods -->
+                <!-- Payment Selection -->
                 <div>
-                    <label class="block text-slate-700 font-semibold mb-2">Select Payment Method</label>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Choose Payment Mode</label>
                     <div class="grid grid-cols-2 gap-4">
-                        <button type="button" onclick="setPaymentMethod('Cash')" id="payCashBtn" class="p-3 border-2 rounded-xl text-center font-bold border-slate-300 text-slate-700 bg-white">
-                            Pay Cash
+                        <button type="button" onclick="setPaymentMethod('Cash')" id="payCashBtn" class="p-3 border-2 rounded-xl text-center font-bold text-sm bg-white transition hover:border-slate-400">
+                            Cash at counter
                         </button>
-                        <button type="button" onclick="setPaymentMethod('Online')" id="payOnlineBtn" class="p-3 border-2 rounded-xl text-center font-bold border-slate-300 text-slate-700 bg-white">
-                            Pay Online (UPI)
+                        <button type="button" onclick="setPaymentMethod('Online')" id="payOnlineBtn" class="p-3 border-2 rounded-xl text-center font-bold text-sm bg-white transition hover:border-slate-400">
+                            Online UPI QR
                         </button>
                     </div>
                 </div>
 
-                <button onclick="submitPrintJob()" id="submitBtn" class="w-full bg-blue-600 text-white p-3 rounded-xl font-bold hover:bg-blue-700 transition">
+                <button onclick="submitPrintJob()" id="submitBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-3.5 rounded-xl font-bold transition shadow-lg shadow-blue-200">
                     Upload & Place Order
                 </button>
             </div>
-        </div>
 
-        <!-- Success Screen -->
-        <div id="successSection" class="hidden text-center space-y-4 py-4">
-            <div class="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto text-3xl">✓</div>
-            <h3 class="text-xl font-bold text-slate-800">Files Uploaded Successfully!</h3>
-            <p class="text-sm text-slate-600">Your order is ready under name: <span id="successName" class="font-bold text-slate-900"></span></p>
+            <!-- SUCCESS STATUS CONTAINER -->
+            <div id="successSection" class="hidden text-center space-y-5 py-6">
+                <div class="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto text-3xl animate-bounce">✓</div>
+                <div>
+                    <h3 class="text-xl font-black text-slate-800">Files Uploaded!</h3>
+                    <p class="text-xs text-slate-500 mt-1">Order registered under name: <span id="successName" class="font-bold text-slate-900"></span></p>
+                </div>
 
-            <div id="upiPaymentBox" class="hidden flex flex-col items-center p-4 border border-blue-200 bg-blue-50 rounded-xl space-y-3">
-                <p class="text-xs font-semibold text-blue-800">👉 Please scan this QR to pay ₹<span id="upiAmountText">0.00</span>:</p>
-                <img id="qrImage" class="w-44 h-44 bg-white border p-1 rounded-lg" src="" alt="UPI QR Code">
-                <p class="text-[10px] text-amber-600 font-semibold text-center">Once paid, ask the counter to print your document.</p>
+                <!-- UPI Payment QR Code Card -->
+                <div id="upiPaymentBox" class="hidden flex flex-col items-center p-4 border border-blue-100 bg-blue-50/50 rounded-2xl space-y-3">
+                    <p class="text-xs font-semibold text-blue-800">👉 Scan QR below to pay ₹<span id="upiAmountText">0.00</span>:</p>
+                    <img id="qrImage" class="w-44 h-44 bg-white border border-slate-200 p-1.5 rounded-xl" src="" alt="UPI QR Code">
+                    <p class="text-[10px] text-slate-400 leading-tight">Once payment is done, head over to the shopkeeper's counter to trigger the print.</p>
+                </div>
+
+                <!-- Cash Payment Card -->
+                <div id="cashPaymentBox" class="hidden p-4 border border-amber-200 bg-amber-50 rounded-2xl text-amber-800 text-xs font-semibold">
+                    Please pay ₹<span id="cashAmountText">0.00</span> in cash directly at the counter.
+                </div>
+
+                <button onclick="resetForm()" class="text-xs text-blue-600 hover:underline font-bold">Upload another file</button>
             </div>
 
-            <div id="cashPaymentBox" class="hidden p-4 border border-amber-200 bg-amber-50 rounded-xl text-amber-800 text-sm font-semibold">
-                Please pay ₹<span id="cashAmountText">0.00</span> in cash at the counter.
-            </div>
-
-            <button onclick="resetForm()" class="text-xs text-blue-600 hover:underline">Upload another file</button>
+            <p id="statusMsg" class="mt-4 text-center text-xs font-bold text-slate-500"></p>
         </div>
-
-        <p id="statusMsg" class="mt-4 text-center text-sm font-medium text-slate-600"></p>
     </div>
 
-    <!-- Image Cropper Modal popup -->
+    <!-- CROPPER DIALOG CONTAINER -->
     <div id="cropperModal" class="hidden fixed inset-0 bg-black/80 flex flex-col items-center justify-center p-4 z-50">
-        <div class="max-w-md w-full bg-white p-4 rounded-2xl flex flex-col items-center shadow-2xl">
-            <h4 class="text-sm font-semibold text-slate-700 mb-2">Adjust & Crop Image</h4>
-            <div class="w-full max-h-[60vh] overflow-hidden rounded-lg bg-slate-100 mb-4 flex items-center justify-center">
-                <img id="cropperImage" class="max-w-full max-h-[50vh]">
+        <div class="max-w-md w-full bg-white p-4 rounded-3xl flex flex-col items-center shadow-2xl">
+            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Adjust and crop photo</h4>
+            <div class="w-full max-h-[50vh] overflow-hidden rounded-xl bg-slate-50 mb-4 flex items-center justify-center">
+                <img id="cropperImage" class="max-w-full max-h-[45vh]">
             </div>
             <div class="flex gap-4 w-full">
-                <button onclick="closeCropper()" class="flex-1 bg-slate-200 py-2 rounded-lg font-bold text-slate-700">Cancel</button>
-                <button onclick="applyCrop()" class="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold">Crop & Save</button>
+                <button onclick="closeCropper()" class="flex-1 bg-slate-100 hover:bg-slate-200 py-2.5 rounded-xl font-bold text-slate-700 text-sm">Cancel</button>
+                <button onclick="applyCrop()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-bold text-sm">Crop & Save</button>
             </div>
         </div>
     </div>
@@ -132,7 +209,7 @@
         const SUPABASE_URL = "https://zokjpxvwzmhiapkeifen.supabase.co"; 
         const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpva2pweHZ3em1oaWFwa2VpZmVuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE5MTA5OTIsImV4cCI6MjA5NzQ4Njk5Mn0.XgvacQ3KXx5F1EusaKw_OcX6c5Q88vjM2xlHnJFS7GM";
         
-        const UPI_ID = "7797440385@upi"; // <--- REPLACE WITH YOUR REAL UPI ID
+        const UPI_ID = "your_upi_id@okaxis"; // <--- REPLACE WITH YOUR SHOP UPI ID
         const SHOP_NAME = "Smart Print Spot";
 
         const BW_RATE = 2.00;
@@ -141,38 +218,76 @@
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
+        // State Machine variables
+        let appMode = "document"; // "document" or "passport"
         let totalPages = 1;
         let finalCost = 0;
         let paymentMethod = "";
-        
+
+        // Document/Standard state
         let isPdf = false;
         let uploadedPdfFile = null;
+        let documentImagesArray = [];
 
-        // Image Cropping State list
-        let rawImagesArray = []; 
-        let activeCropIndex = null;
+        // Passport state
+        let passportOriginalUrl = null;
+        let passportCroppedUrl = null;
+        let passportNumImpressions = 36;
+
+        // Cropper state
+        let activeCropTarget = null; // "document" or "passport"
+        let activeDocCropIndex = null;
         let cropperInstance = null;
 
-        // --- 2. INPUT HANDLER ---
-        document.getElementById('fileInput').addEventListener('change', async function(e) {
+        // Set default mode on boot
+        switchMode('document');
+
+        // --- 2. SWITCH MODES ---
+        function switchMode(mode) {
+            appMode = mode;
+            const tabDoc = document.getElementById('tabDoc');
+            const tabPass = document.getElementById('tabPass');
+            const docSection = document.getElementById('docModeSection');
+            const passSection = document.getElementById('passportModeSection');
+            const duplexContainer = document.getElementById('duplexContainer');
+
+            resetForm(); // Completely wipe state on shift
+
+            if (mode === "document") {
+                tabDoc.classList.add('custom-tab-active');
+                tabPass.classList.remove('custom-tab-active');
+                docSection.classList.remove('hidden');
+                passSection.classList.add('hidden');
+                duplexContainer.classList.remove('hidden');
+            } else {
+                tabPass.classList.add('custom-tab-active');
+                tabDoc.classList.remove('custom-tab-active');
+                passSection.classList.remove('hidden');
+                docSection.classList.add('hidden');
+                duplexContainer.classList.add('hidden'); // No duplex for passport sheets
+            }
+        }
+
+        // --- 3. FILE SELECTION ---
+        // Document Mode file selection
+        document.getElementById('docFileInput').addEventListener('change', async function(e) {
             const files = Array.from(e.target.files);
             if (files.length === 0) return;
 
-            // Reset States
-            rawImagesArray = [];
+            documentImagesArray = [];
             isPdf = false;
             uploadedPdfFile = null;
-            document.getElementById('cropQueueBox').classList.add('hidden');
+            document.getElementById('docCropBox').classList.add('hidden');
             document.getElementById('pdfStatusBox').classList.add('hidden');
+            document.getElementById('imageLayoutPresetBox').classList.add('hidden');
 
             const firstFile = files[0];
 
-            // A. If they uploaded a PDF (We only allow 1 PDF at a time)
             if (firstFile.type === 'application/pdf') {
                 isPdf = true;
                 uploadedPdfFile = firstFile;
                 totalPages = 1;
-                document.getElementById('statusMsg').innerText = "Analyzing PDF...";
+                document.getElementById('statusMsg').innerText = "Parsing PDF metadata...";
 
                 const fileReader = new FileReader();
                 fileReader.onload = async function() {
@@ -182,39 +297,38 @@
                         totalPages = pdf.numPages;
                         document.getElementById('pageCountDisplay').innerText = totalPages;
                         document.getElementById('pdfStatusBox').classList.remove('hidden');
-                        document.getElementById('printOptions').classList.remove('hidden');
+                        document.getElementById('globalSettingsBlock').classList.remove('hidden');
                         document.getElementById('statusMsg').innerText = "";
                         setPaymentMethod('Online');
                     } catch (err) {
-                        alert("Error reading PDF file!");
+                        alert("Error parsing PDF structure!");
                         document.getElementById('statusMsg').innerText = "";
                     }
                 };
                 fileReader.readAsArrayBuffer(firstFile);
-            } 
-            // B. If they uploaded Images (Can be multiple!)
-            else {
-                const imageFiles = files.filter(f => f.type.startsWith('image/'));
-                if (imageFiles.length === 0) return;
+            } else {
+                const imgFiles = files.filter(f => f.type.startsWith('image/'));
+                if (imgFiles.length === 0) return;
 
-                document.getElementById('statusMsg').innerText = "Loading images...";
-                totalPages = imageFiles.length; // 1 page per image
+                document.getElementById('statusMsg').innerText = "Loading image assets...";
+                totalPages = imgFiles.length;
 
-                let loadCount = 0;
-                imageFiles.forEach((file, index) => {
+                let loadedCount = 0;
+                imgFiles.forEach((file, index) => {
                     const reader = new FileReader();
                     reader.onload = function(event) {
-                        rawImagesArray.push({
+                        documentImagesArray.push({
                             id: index,
                             name: file.name,
                             originalUrl: event.target.result,
-                            croppedUrl: event.target.result // Default is uncropped
+                            croppedUrl: event.target.result
                         });
-                        loadCount++;
-                        if (loadCount === imageFiles.length) {
-                            renderImageGrid();
-                            document.getElementById('cropQueueBox').classList.remove('hidden');
-                            document.getElementById('printOptions').classList.remove('hidden');
+                        loadedCount++;
+                        if (loadedCount === imgFiles.length) {
+                            renderDocImageList();
+                            document.getElementById('docCropBox').classList.remove('hidden');
+                            document.getElementById('imageLayoutPresetBox').classList.remove('hidden');
+                            document.getElementById('globalSettingsBlock').classList.remove('hidden');
                             document.getElementById('statusMsg').innerText = "";
                             setPaymentMethod('Online');
                         }
@@ -224,19 +338,39 @@
             }
         });
 
-        // --- 3. RENDER IMAGE LIST WITH CROP BUTTONS ---
-        function renderImageGrid() {
-            const imageList = document.getElementById('imageList');
-            imageList.innerHTML = "";
+        // Passport Mode file selection
+        document.getElementById('passportFileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file || !file.type.startsWith('image/')) return;
 
-            rawImagesArray.forEach((img, idx) => {
-                imageList.innerHTML += `
-                    <div class="flex items-center justify-between bg-white p-2 rounded-lg border shadow-sm">
+            document.getElementById('statusMsg').innerText = "Loading face photo...";
+            totalPages = 1; // Always 1 A4 sheet of paper
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                passportOriginalUrl = event.target.result;
+                passportCroppedUrl = event.target.result; // Default fallback uncropped
+                
+                document.getElementById('statusMsg').innerText = "";
+                // Force open cropper directly for passport alignment
+                openCropperTool('passport');
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // --- 4. IMAGE LIST RENDER ---
+        function renderDocImageList() {
+            const docImageList = document.getElementById('docImageList');
+            docImageList.innerHTML = "";
+
+            documentImagesArray.forEach((img, idx) => {
+                docImageList.innerHTML += `
+                    <div class="flex items-center justify-between bg-white p-2 rounded-xl border shadow-sm">
                         <div class="flex items-center space-x-2">
-                            <img src="${img.croppedUrl}" class="w-10 h-10 object-cover rounded border">
+                            <img src="${img.croppedUrl}" class="w-10 h-10 object-cover rounded-lg border">
                             <span class="text-xs font-semibold text-slate-700 truncate max-w-[150px]">${img.name}</span>
                         </div>
-                        <button onclick="openCropper(${idx})" class="bg-blue-100 text-blue-600 hover:bg-blue-200 text-xs px-3 py-1.5 rounded-lg font-bold">
+                        <button onclick="openCropperTool('document', ${idx})" class="bg-blue-50 text-blue-600 hover:bg-blue-100 text-xs px-3 py-1.5 rounded-lg font-bold">
                             ✂️ Crop
                         </button>
                     </div>
@@ -244,22 +378,32 @@
             });
         }
 
-        // --- 4. CROPPER MODAL CONTROLLERS ---
-        function openCropper(index) {
-            activeCropIndex = index;
+        // --- 5. THE CROPPER POPUP SYSTEM ---
+        function openCropperTool(target, index = null) {
+            activeCropTarget = target;
+            activeDocCropIndex = index;
+
             const modal = document.getElementById('cropperModal');
             const cropImg = document.getElementById('cropperImage');
             
-            cropImg.src = rawImagesArray[index].originalUrl;
+            cropImg.src = target === 'document' ? documentImagesArray[index].originalUrl : passportOriginalUrl;
             modal.classList.remove('hidden');
 
-            // Initialize CropperJS with free aspect ratio
             if (cropperInstance) cropperInstance.destroy();
-            cropperInstance = new Cropper(cropImg, {
+
+            // Configure cropping parameters
+            let cropperConfig = {
                 viewMode: 1,
                 autoCropArea: 1,
                 responsive: true
-            });
+            };
+
+            // STRICT Passport crop aspect ratio (3:4 ratio matches standard 30x40mm or 35x45mm slots)
+            if (target === 'passport') {
+                cropperConfig.aspectRatio = 3 / 4;
+            }
+
+            cropperInstance = new Cropper(cropImg, cropperConfig);
         }
 
         function closeCropper() {
@@ -270,18 +414,51 @@
         function applyCrop() {
             if (!cropperInstance) return;
 
-            // Get cropped canvas data
             const canvas = cropperInstance.getCroppedCanvas();
-            const croppedDataUrl = canvas.toDataURL('image/jpeg', 0.9);
+            const croppedUrl = canvas.toDataURL('image/jpeg', 0.95);
 
-            // Save the cropped image back into our array
-            rawImagesArray[activeCropIndex].croppedUrl = croppedDataUrl;
+            if (activeCropTarget === 'document') {
+                documentImagesArray[activeDocCropIndex].croppedUrl = croppedUrl;
+                renderDocImageList();
+            } else {
+                passportCroppedUrl = croppedUrl;
+                document.getElementById('passportConfigBox').classList.remove('hidden');
+                document.getElementById('globalSettingsBlock').classList.remove('hidden');
+                updatePassportPreview();
+                setPaymentMethod('Online');
+            }
 
             closeCropper();
-            renderImageGrid();
         }
 
-        // --- 5. DYNAMIC CALCULATE PRICE ---
+        // --- 6. PASSPORT REALTIME PREVIEW GENERATOR (6x6 Grid) ---
+        function updatePassportPreview() {
+            const count = parseInt(document.getElementById('passportQuantity').value);
+            passportNumImpressions = count;
+            document.getElementById('passQuantityDisplay').innerText = `${count} Photos`;
+
+            const grid = document.getElementById('passportPreviewGrid');
+            grid.innerHTML = "";
+
+            // Populate all 36 slots of the 6x6 grid matching the template image
+            for (let i = 1; i <= 36; i++) {
+                if (i <= count) {
+                    grid.innerHTML += `
+                        <div class="passport-grid-item border border-slate-600 rounded bg-slate-900 overflow-hidden">
+                            <img src="${passportCroppedUrl}" class="w-full h-full object-cover">
+                        </div>
+                    `;
+                } else {
+                    grid.innerHTML += `
+                        <div class="passport-grid-item border-2 border-dashed border-slate-750 rounded bg-slate-800 flex items-center justify-center">
+                            <span class="text-[8px] text-slate-700 font-bold">${i}</span>
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        // --- 7. DYNAMIC PRICE ENGINE ---
         function calculateCost() {
             const colorMode = document.getElementById('colorMode').value === "true";
             const copies = parseInt(document.getElementById('copies').value) || 1;
@@ -290,14 +467,14 @@
             document.getElementById('priceDisplay').innerText = finalCost.toFixed(2);
         }
 
-        // --- 6. SELECT PAYMENT WAY ---
+        // --- 8. TOGGLE STYLING MANIPULATION ---
         function setPaymentMethod(method) {
             paymentMethod = method;
             const cashBtn = document.getElementById('payCashBtn');
             const onlineBtn = document.getElementById('payOnlineBtn');
 
             const activeColors = ['border-blue-500', 'bg-blue-50', 'text-blue-700'];
-            const inactiveColors = ['border-slate-300', 'text-slate-700', 'bg-white'];
+            const inactiveColors = ['border-slate-200', 'text-slate-500', 'bg-white'];
 
             if (method === "Cash") {
                 cashBtn.classList.remove(...inactiveColors);
@@ -313,64 +490,161 @@
             calculateCost();
         }
 
-        // --- 7. CONVERT IMAGES TO SINGLE PDF ---
+        // --- 9. GENERATOR: IMAGE LAYOUT COMPILER FOR A4 ---
         function compileImagesToPDF() {
             const { jsPDF } = window.jspdf;
-            const pdf = new jsPDF('p', 'mm', 'a4'); // Standard portrait A4 PDF
+            const pdf = new jsPDF('p', 'mm', 'a4');
             const pdfWidth = pdf.internal.pageSize.getWidth();
             const pdfHeight = pdf.internal.pageSize.getHeight();
 
-            rawImagesArray.forEach((img, idx) => {
+            const preset = document.getElementById('imageLayoutPreset').value;
+
+            documentImagesArray.forEach((img, idx) => {
                 if (idx > 0) pdf.addPage();
-                
-                // Add cropped image stretched/padded nicely on A4
-                pdf.addImage(img.croppedUrl, 'JPEG', 10, 10, pdfWidth - 20, pdfHeight - 20);
+
+                // Compute exact layout bounds to avoid squishing
+                if (preset === 'fit') {
+                    // Standard centered fit-to-page preserving aspect ratio
+                    const margin = 15;
+                    const maxW = pdfWidth - (margin * 2);
+                    const maxH = pdfHeight - (margin * 2);
+
+                    const imgTemp = new Image();
+                    imgTemp.src = img.croppedUrl;
+                    
+                    const ratio = imgTemp.width / imgTemp.height;
+                    let targetW = maxW;
+                    let targetH = maxW / ratio;
+
+                    if (targetH > maxH) {
+                        targetH = maxH;
+                        targetW = maxH * ratio;
+                    }
+
+                    const posX = (pdfWidth - targetW) / 2;
+                    const posY = (pdfHeight - targetH) / 2;
+                    pdf.addImage(img.croppedUrl, 'JPEG', posX, posY, targetW, targetH);
+                } 
+                else if (preset === 'half') {
+                    // Fits beautifully inside the top half (A5 size)
+                    pdf.addImage(img.croppedUrl, 'JPEG', 15, 15, pdfWidth - 30, (pdfHeight / 2) - 30);
+                } 
+                else if (preset === 'id_card') {
+                    // Fits standardized ID Card boundaries (85x54mm) centered perfectly on A4
+                    const cardW = 85;
+                    const cardH = 54;
+                    const posX = (pdfWidth - cardW) / 2;
+                    const posY = (pdfHeight - cardH) / 2;
+                    pdf.addImage(img.croppedUrl, 'JPEG', posX, posY, cardW, cardH);
+                }
             });
 
             const pdfBlob = pdf.output('blob');
             return new File([pdfBlob], "compiled_images.pdf", { type: 'application/pdf' });
         }
 
-        // --- 8. UPLOAD & SUBMIT PRINT ORDER ---
+        // --- 10. GENERATOR: PASSPORT 6x6 GRID LAYOUT FOR A4 ---
+        function compilePassportToPDF() {
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+
+            // Perfectly calculated grid parameters matching the 6x6 grid image
+            const photoW = 30; // 30 mm width
+            const photoH = 40; // 40 mm height
+            const gap = 2;     // 2 mm spacing
+            
+            const cols = 6;
+            const rows = 6;
+
+            const gridW = (cols * photoW) + ((cols - 1) * gap); // 190 mm total width
+            const gridH = (rows * photoH) + ((rows - 1) * gap); // 250 mm total height
+
+            const startX = (pdfWidth - gridW) / 2;  // Centered margins (10 mm)
+            const startY = (pdfHeight - gridH) / 2; // Centered margins (23.5 mm)
+
+            let photoIndex = 1;
+
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    if (photoIndex > passportNumImpressions) {
+                        // Optional: draw empty layout guide boxes matching the reference image layout
+                        pdf.setDrawColor(200, 200, 200);
+                        pdf.setLineWidth(0.1);
+                        pdf.rect(
+                            startX + (c * (photoW + gap)),
+                            startY + (r * (photoH + gap)),
+                            photoW,
+                            photoH
+                        );
+                    } else {
+                        // Draw cropped image into slot
+                        pdf.addImage(
+                            passportCroppedUrl,
+                            'JPEG',
+                            startX + (c * (photoW + gap)),
+                            startY + (r * (photoH + gap)),
+                            photoW,
+                            photoH
+                        );
+                    }
+                    photoIndex++;
+                }
+            }
+
+            const pdfBlob = pdf.output('blob');
+            return new File([pdfBlob], "passport_sheet.pdf", { type: 'application/pdf' });
+        }
+
+        // --- 11. SUBMIT CONTROLLER ---
         async function submitPrintJob() {
             const name = document.getElementById('custName').value.trim();
             const statusMsg = document.getElementById('statusMsg');
             const submitBtn = document.getElementById('submitBtn');
 
             if (!name) {
-                alert("Please enter your name first!");
+                alert("Please write your name first!");
                 return;
             }
             if (!paymentMethod) {
-                alert("Please choose a payment method!");
+                alert("Please select a payment mode!");
                 return;
             }
 
             submitBtn.disabled = true;
-            statusMsg.innerText = "Compiling and uploading documents...";
+            statusMsg.innerText = "Processing layouts and compiling PDF...";
 
             let fileToUpload = null;
             let displayFilename = "";
+            let duplexModeSelected = "simplex";
 
-            if (isPdf) {
-                fileToUpload = uploadedPdfFile;
-                displayFilename = uploadedPdfFile.name;
+            if (appMode === 'document') {
+                if (isPdf) {
+                    fileToUpload = uploadedPdfFile;
+                    displayFilename = uploadedPdfFile.name;
+                } else {
+                    fileToUpload = compileImagesToPDF();
+                    displayFilename = "compiled_images.pdf";
+                }
+                duplexModeSelected = document.getElementById('duplexMode').value;
             } else {
-                // Compile images to a clean PDF in browser memory
-                fileToUpload = compileImagesToPDF();
-                displayFilename = "compiled_images.pdf";
+                // Compile the exact grid layout passport PDF
+                fileToUpload = compilePassportToPDF();
+                displayFilename = "passport_sheet.pdf";
+                duplexModeSelected = "simplex"; // Passports always single-sided
             }
 
             const fileName = `${Date.now()}_${fileToUpload.name}`;
 
-            // Upload PDF file to Supabase Storage
+            // Upload finalized PDF payload to Storage Bucket
             const { error: uploadError } = await supabaseClient.storage
                 .from('print-files')
                 .upload(fileName, fileToUpload);
 
             if (uploadError) {
                 console.error(uploadError);
-                statusMsg.innerText = "Upload failed! Please check your internet connection.";
+                statusMsg.innerText = "File upload failed! Please check connection.";
                 submitBtn.disabled = false;
                 return;
             }
@@ -379,12 +653,11 @@
                 .from('print-files')
                 .getPublicUrl(fileName);
 
-            statusMsg.innerText = "Connecting database queue...";
+            statusMsg.innerText = "Registering database row...";
 
-            const duplexSetting = document.getElementById('duplexMode').value;
             const paymentText = paymentMethod === "Online" ? `UPI App Pay (₹${finalCost.toFixed(2)})` : 'Cash at Shop';
 
-            // Insert details into print_jobs
+            // Insert into Database
             const { error: dbError } = await supabaseClient
                 .from('print_jobs')
                 .insert([{
@@ -393,7 +666,7 @@
                     customer_name: name,
                     copies: parseInt(document.getElementById('copies').value) || 1,
                     color: document.getElementById('colorMode').value === "true",
-                    duplex: duplexSetting, // Simplex or Duplex
+                    duplex: duplexModeSelected,
                     status: 'Pending Approval',
                     payment_status: paymentText
                 }]);
@@ -426,31 +699,37 @@
             }
         }
 
-        // Reset all states
+        // --- 12. RESET TO COLD STATE ---
         function resetForm() {
             const submitBtn = document.getElementById('submitBtn');
             submitBtn.disabled = false;
-            
+
             document.getElementById('statusMsg').innerHTML = "";
             document.getElementById('formSection').classList.remove('hidden');
             document.getElementById('successSection').classList.add('hidden');
             
-            document.getElementById('fileInput').value = "";
+            document.getElementById('docFileInput').value = "";
+            document.getElementById('passportFileInput').value = "";
             document.getElementById('custName').value = "";
             
             totalPages = 1;
             finalCost = 0;
             paymentMethod = "";
+
             isPdf = false;
             uploadedPdfFile = null;
-            rawImagesArray = [];
+            documentImagesArray = [];
+
+            passportOriginalUrl = null;
+            passportCroppedUrl = null;
+            passportNumImpressions = 36;
 
             document.getElementById('previewContainer').classList.add('hidden');
-            document.getElementById('printOptions').classList.add('hidden');
-            document.getElementById('imagePreview').classList.add('hidden');
-            document.getElementById('pdfPreview').classList.add('hidden');
-            document.getElementById('cropQueueBox').classList.add('hidden');
+            document.getElementById('globalSettingsBlock').classList.add('hidden');
+            document.getElementById('docCropBox').classList.add('hidden');
+            document.getElementById('imageLayoutPresetBox').classList.add('hidden');
             document.getElementById('pdfStatusBox').classList.add('hidden');
+            document.getElementById('passportConfigBox').classList.add('hidden');
         }
     </script>
 </body>
