@@ -700,6 +700,7 @@
         }
 
         // --- 12. RESET TO COLD STATE ---
+       // Reset all states (CORRECTED: Removed obsolete previewContainer check)
         function resetForm() {
             const submitBtn = document.getElementById('submitBtn');
             submitBtn.disabled = false;
@@ -715,7 +716,6 @@
             totalPages = 1;
             finalCost = 0;
             paymentMethod = "";
-
             isPdf = false;
             uploadedPdfFile = null;
             documentImagesArray = [];
@@ -724,7 +724,6 @@
             passportCroppedUrl = null;
             passportNumImpressions = 36;
 
-            document.getElementById('previewContainer').classList.add('hidden');
             document.getElementById('globalSettingsBlock').classList.add('hidden');
             document.getElementById('docCropBox').classList.add('hidden');
             document.getElementById('imageLayoutPresetBox').classList.add('hidden');
