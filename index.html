@@ -1,3 +1,5 @@
+--- START OF FILE Paste June 21, 2026 - 4:29PM ---
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -196,7 +198,7 @@
 
                 <div id="stdDuplexControl">
                     <label class="block text-xs font-semibold text-slate-500 mb-1">Print Layout</label>
-                    <select id="duplexMode" class="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-medium">
+                    <select id="duplexMode" onchange="calculateCost()" class="w-full p-2.5 border border-slate-200 rounded-xl bg-white text-xs font-medium">
                         <option value="simplex">Single-Sided (Separate Pages)</option>
                         <option value="duplex">Both Sides (Front & Back of Page)</option>
                     </select>
@@ -288,9 +290,12 @@
         const UPI_ID = "7797440385@upi"; 
         const SHOP_NAME = "Smart Print Spot";
 
-        const BW_RATE = 2.00;
-        const COLOR_RATE = 10.00;
-        const PASSPORT_A4_SHEET_RATE = 50.00; 
+        // Updated print rates
+        const BW_SIMPLEX_RATE = 3.00;
+        const BW_DUPLEX_RATE = 3.00;       // Per sheet (two pages)
+        const COLOR_SIMPLEX_RATE = 5.00;
+        const COLOR_DUPLEX_RATE = 10.00;   // Per sheet (two pages)
+        const PASSPORT_SINGLE_RATE = 5.00; // Per individual photo impression
 
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
@@ -355,7 +360,7 @@
                 docSection.classList.add('hidden');
                 document.getElementById('stdPrintControls').classList.add('hidden');
                 document.getElementById('stdDuplexControl').classList.add('hidden');
-                document.getElementById('priceContext').innerText = "Passport Flat Rate";
+                document.getElementById('priceContext').innerText = "Passport Photo Rate";
             }
             clearActiveState();
             calculateCost();
@@ -732,20 +737,7 @@
             }
         }
 
-        function triggerActiveRotate() {
-            if (activeSelectedIdx !== null) {
-                rotateImage(activeSelectedIdx);
-            }
-        }
-
-        function triggerActiveDelete() {
-            if (activeSelectedIdx !== null) {
-                removeImage(activeSelectedIdx);
-                activeSelectedIdx = null;
-            }
-        }
-
-        // --- IMAGE ROTATION HANDLER (PHYSICAL ROTATION ENGINE) ---
+        // --- IMAGE ROTATION HANDLER ---
         function rotateImage(idx) {
             showStatusBar("Rotating document pixels...");
             const imgState = rawImagesArray[idx];
@@ -929,12 +921,35 @@
         function calculateCost() {
             if (activeTab === 'document') {
                 const colorMode = document.getElementById('colorMode').value === "true";
+                const duplexMode = document.getElementById('duplexMode').value;
                 const copies = parseInt(document.getElementById('copies').value) || 1;
-                const rate = colorMode ? COLOR_RATE : BW_RATE;
-                finalCost = totalPages * copies * rate;
+                
+                let costPerPageOrSheet = 0;
+                if (colorMode) {
+                    if (duplexMode === 'duplex') {
+                        // Color Duplex: ₹10 per printed sheet (holds 2 pages)
+                        const sheets = Math.ceil(totalPages / 2);
+                        costPerPageOrSheet = sheets * COLOR_DUPLEX_RATE;
+                    } else {
+                        // Color Simplex: ₹5 per page
+                        costPerPageOrSheet = totalPages * COLOR_SIMPLEX_RATE;
+                    }
+                } else {
+                    if (duplexMode === 'duplex') {
+                        // Black & White Duplex: ₹3 per printed sheet (holds 2 pages)
+                        const sheets = Math.ceil(totalPages / 2);
+                        costPerPageOrSheet = sheets * BW_DUPLEX_RATE;
+                    } else {
+                        // Black & White Simplex: ₹3 per page
+                        costPerPageOrSheet = totalPages * BW_SIMPLEX_RATE;
+                    }
+                }
+                finalCost = costPerPageOrSheet * copies;
             } else {
+                const impressions = parseInt(document.getElementById('passportImpressions').value) || 12;
                 const passportCopies = parseInt(document.getElementById('passportCopies').value) || 1;
-                finalCost = PASSPORT_A4_SHEET_RATE * passportCopies;
+                // Passport: ₹5 per single photo impression
+                finalCost = PASSPORT_SINGLE_RATE * impressions * passportCopies;
             }
             document.getElementById('priceDisplay').innerText = finalCost.toFixed(2);
         }
