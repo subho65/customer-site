@@ -8,7 +8,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
+    <link class="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Inter Font -->
@@ -92,22 +92,32 @@
                     </div>
                 </div>
 
-                <!-- One Single A4 Canvas Layout Composer (Multiple images sit together here) -->
+                <!-- Word-Style Canvas Container -->
                 <div id="cropQueueBox" class="hidden space-y-4">
                     <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">A4 Layout Page Editor</p>
-                    <p class="text-[10px] text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-lg p-2.5 font-medium">✨ Visual Page Composer: Drag images to reposition. Use the corner circle to scale. Stacking order is adjusted dynamically when clicked.</p>
+                    <p class="text-[10px] text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-lg p-2.5 font-medium">✨ Visual Page Editor: Click an image to select it. Drag to move, or scale using the corner circle. Click A4 background to deselect.</p>
                     
-                    <!-- Single A4 Container (280px wide, ~396px height scale) -->
+                    <!-- Single A4 Canvas Container (280px wide, ~396px height scale) -->
                     <div class="flex flex-col items-center justify-center bg-slate-100 rounded-2xl p-4 border border-slate-200/50">
                         <div id="a4-canvas" class="relative bg-white aspect-[210/297] w-[280px] shadow-lg border border-slate-300 rounded overflow-hidden select-none">
                             <!-- Draggable elements dynamically injected here -->
                         </div>
                     </div>
 
-                    <!-- Individual Layer Controls -->
-                    <div class="space-y-2">
-                        <p class="text-xs font-bold text-slate-500 uppercase tracking-wider">Page Layers</p>
-                        <div id="layerList" class="space-y-2.5"></div>
+                    <!-- Contextual Floating Control Bar -->
+                    <div id="canvasToolbar" class="hidden flex items-center justify-center gap-4 bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-xl w-fit mx-auto transition-all animate-fade-in">
+                        <span class="text-[9px] text-slate-400 font-bold uppercase border-r border-slate-800 pr-3 tracking-wider">Layer Controls</span>
+                        <button type="button" onclick="triggerActiveCrop()" class="hover:text-blue-400 text-xs font-bold flex items-center gap-1 transition">
+                            <span>✂️ Crop</span>
+                        </button>
+                        <span class="text-slate-800">|</span>
+                        <button type="button" onclick="triggerActiveRotate()" class="hover:text-blue-400 text-xs font-bold flex items-center gap-1 transition">
+                            <span>🔄 Rotate</span>
+                        </button>
+                        <span class="text-slate-800">|</span>
+                        <button type="button" onclick="triggerActiveDelete()" class="hover:text-rose-400 text-xs font-bold flex items-center gap-1 transition">
+                            <span>🗑️ Delete</span>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -304,6 +314,7 @@
         let activeTargetId = null;
         let startX, startY, startWidth, startHeight, startLeft, startTop;
         let maxZ = 10; // Dynamic stacking layer index counter
+        let activeSelectedIdx = null; // Track selected index
 
         // Passport workflow state
         let passportOriginalUrl = null;
@@ -360,6 +371,7 @@
             passportOriginalUrl = null;
             passportCroppedUrl = null;
             maxZ = 10;
+            activeSelectedIdx = null;
 
             document.getElementById('cropQueueBox').classList.add('hidden');
             document.getElementById('pdfStatusBox').classList.add('hidden');
@@ -367,6 +379,7 @@
             document.getElementById('passportCropCard').classList.add('hidden');
             document.getElementById('passportQuantityConfig').classList.add('hidden');
             document.getElementById('printOptions').classList.add('hidden');
+            document.getElementById('canvasToolbar').classList.add('hidden');
             hideStatusBar();
         }
 
@@ -390,9 +403,11 @@
             rawImagesArray = [];
             isPdf = false;
             uploadedPdfFile = null;
+            activeSelectedIdx = null;
             document.getElementById('cropQueueBox').classList.add('hidden');
             document.getElementById('pdfStatusBox').classList.add('hidden');
             document.getElementById('pdfPreviewCard').classList.add('hidden');
+            document.getElementById('canvasToolbar').classList.add('hidden');
 
             const firstFile = files[0];
 
@@ -428,7 +443,7 @@
                 if (imageFiles.length === 0) return;
 
                 showStatusBar("Processing images...");
-                totalPages = 1; // Multi-images compose onto 1 single A4 sheet
+                totalPages = 1; // Multi-images compile onto 1 single A4 page
 
                 let loadCount = 0;
                 imageFiles.forEach((file, index) => {
@@ -450,7 +465,7 @@
                                 name: file.name,
                                 originalUrl: event.target.result,
                                 croppedUrl: event.target.result,
-                                left: 20 + (index * 15), // Stagger placements
+                                left: 20 + (index * 15), 
                                 top: 20 + (index * 15),
                                 width: defaultWidth,
                                 height: defaultHeight,
@@ -524,41 +539,61 @@
         // --- 4. RENDER DRAG & RESIZE IMAGE GRID (WORD-STYLE WORKSPACE) ---
         function renderImageGrid() {
             const canvas = document.getElementById('a4-canvas');
-            const layerList = document.getElementById('layerList');
-            
             canvas.innerHTML = "";
-            layerList.innerHTML = "";
 
             rawImagesArray.forEach((img, idx) => {
-                // 1. Render absolute position draggable frame inside standard canvas (280px wide)
+                const isActive = (idx === activeSelectedIdx);
+                
                 canvas.innerHTML += `
-                    <div id="wrapper-${idx}" class="absolute cursor-move border border-blue-500 bg-blue-500/5 select-none touch-none" style="left: ${img.left}px; top: ${img.top}px; width: ${img.width}px; height: ${img.height}px; z-index: ${img.zIndex || 1};">
+                    <div id="wrapper-${idx}" 
+                         class="absolute cursor-move select-none touch-none
+                                ${isActive ? 'border-2 border-blue-600 ring-4 ring-blue-500/15 shadow-md' : 'border border-dashed border-slate-300 hover:border-slate-400'}" 
+                         style="left: ${img.left}px; top: ${img.top}px; width: ${img.width}px; height: ${img.height}px; z-index: ${img.zIndex || 1};">
                         <img id="img-item-${idx}" src="${img.croppedUrl}" class="w-full h-full object-cover pointer-events-none select-none">
-                        <!-- Corner Resize Handle -->
-                        <div class="absolute -right-2 -bottom-2 w-5 h-5 bg-blue-600 border-2 border-white rounded-full cursor-se-resize shadow-md flex items-center justify-center pointer-events-auto active:scale-125 transition-transform" id="resize-handle-${idx}"></div>
-                    </div>
-                `;
-
-                // 2. Render Layer Control Card below with action buttons
-                layerList.innerHTML += `
-                    <div class="flex items-center justify-between bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
-                        <div class="flex items-center space-x-2.5 overflow-hidden">
-                            <img src="${img.croppedUrl}" class="w-8 h-8 object-cover rounded-lg border border-slate-200 flex-shrink-0">
-                            <span class="text-xs font-bold text-slate-700 truncate max-w-[110px]">${img.name}</span>
-                        </div>
-                        <div class="flex items-center space-x-1.5">
-                            <button type="button" onclick="openStandardCropper(${idx})" class="bg-blue-50 hover:bg-blue-100 text-blue-600 text-[10px] px-2.5 py-1.5 rounded-xl font-bold transition">✂️ Crop</button>
-                            <button type="button" onclick="rotateImage(${idx})" class="bg-blue-50 hover:bg-blue-100 text-blue-600 text-[10px] px-2.5 py-1.5 rounded-xl font-bold transition">🔄 Rotate</button>
-                            <button type="button" onclick="removeImage(${idx})" class="bg-rose-50 hover:bg-rose-100 text-rose-600 text-[10px] px-2.5 py-1.5 rounded-xl font-bold transition">✕ Delete</button>
-                        </div>
+                        <!-- Corner Resize Handle (Hidden when layer is not selected) -->
+                        <div class="${isActive ? 'absolute' : 'hidden'} -right-2 -bottom-2 w-5 h-5 bg-blue-600 border-2 border-white rounded-full cursor-se-resize shadow-md flex items-center justify-center pointer-events-auto active:scale-125 transition-transform" id="resize-handle-${idx}"></div>
                     </div>
                 `;
             });
 
-            // Bind canvas listeners
+            // Toggle floating contextual design controls toolbar
+            const toolbar = document.getElementById('canvasToolbar');
+            if (activeSelectedImageExists()) {
+                toolbar.classList.remove('hidden');
+            } else {
+                toolbar.classList.add('hidden');
+            }
+
+            // Bind interactions
             rawImagesArray.forEach((img, idx) => {
                 initCanvasInteraction(idx);
             });
+        }
+
+        function activeSelectedLayer() {
+            return activeTargetId !== null ? activeTargetId : activeImageIdx;
+        }
+
+        // Click outside on A4 sheet canvas background to deselect active image layers
+        document.getElementById('a4-canvas').addEventListener('pointerdown', (e) => {
+            if (e.target === document.getElementById('a4-canvas')) {
+                activeSelectedIdx = null;
+                rawImagesArray.forEach((o, oldIdx) => {
+                    const oldWrapper = document.getElementById(`wrapper-${oldIdx}`);
+                    const oldHandle = document.getElementById(`resize-handle-${oldIdx}`);
+                    if (oldWrapper) {
+                        oldWrapper.className = "absolute cursor-move select-none touch-none border border-dashed border-slate-300 hover:border-slate-400";
+                    }
+                    if (oldHandle) {
+                        oldHandle.className = "hidden";
+                    }
+                });
+                document.getElementById('canvasToolbar').classList.add('hidden');
+            }
+        });
+
+        function activeSelectedImageExists() {
+            return activeSelectedIdx !== null;
         }
 
         // --- WORD-STYLE INTERACTIONS ENGINE ---
@@ -575,10 +610,31 @@
                 if (e.target === handle) return;
                 e.preventDefault();
 
-                // Bring current layer to front stack dynamically on click/tap
+                // Select image and bring it to front stacking layout
                 maxZ++;
                 imgState.zIndex = maxZ;
                 wrapper.style.zIndex = maxZ;
+
+                if (activeSelectedIdx !== idx) {
+                    // Instantly update active styling borders to selection styles without losing dynamic focus
+                    rawImagesArray.forEach((o, oldIdx) => {
+                        const oldWrapper = document.getElementById(`wrapper-${oldIdx}`);
+                        const oldHandle = document.getElementById(`resize-handle-${oldIdx}`);
+                        if (oldWrapper) {
+                            oldWrapper.className = "absolute cursor-move select-none touch-none border border-dashed border-slate-300 hover:border-slate-400";
+                        }
+                        if (oldHandle) {
+                            oldHandle.className = "hidden";
+                        }
+                    });
+
+                    wrapper.className = "absolute cursor-move select-none touch-none border-2 border-blue-600 ring-4 ring-blue-500/15 shadow-md";
+                    if (handle) {
+                        handle.className = "absolute -right-2 -bottom-2 w-5 h-5 bg-blue-600 border-2 border-white rounded-full cursor-se-resize shadow-md flex items-center justify-center pointer-events-auto active:scale-125 transition-transform";
+                    }
+                    activeSelectedIdx = idx;
+                    document.getElementById('canvasToolbar').classList.remove('hidden');
+                }
 
                 isDragging = true;
                 activeTargetId = idx;
@@ -667,6 +723,26 @@
                 activeTargetId = null;
                 try { handle.releasePointerCapture(e.pointerId); } catch(err) {}
             });
+        }
+
+        // --- CONTEXTUAL ACTION CONTROLLERS ---
+        function triggerActiveCrop() {
+            if (activeSelectedIdx !== null) {
+                openStandardCropper(activeSelectedIdx);
+            }
+        }
+
+        function triggerActiveRotate() {
+            if (activeSelectedIdx !== null) {
+                rotateImage(activeSelectedIdx);
+            }
+        }
+
+        function triggerActiveDelete() {
+            if (activeSelectedIdx !== null) {
+                removeImage(activeSelectedIdx);
+                activeSelectedIdx = null;
+            }
         }
 
         // --- IMAGE ROTATION HANDLER (PHYSICAL ROTATION ENGINE) ---
