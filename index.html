@@ -17,6 +17,13 @@
         body {
             font-family: 'Inter', sans-serif;
         }
+        /* Prevent Tailwind's image resets from breaking Cropper's layout */
+        .cropper-container img {
+            max-width: none !important;
+            max-height: none !important;
+            min-width: 0 !important;
+            min-height: 0 !important;
+        }
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen flex flex-col items-center justify-center p-4 sm:p-6">
@@ -33,8 +40,9 @@
                     <p class="text-[11px] text-blue-100 font-medium">Instant Counter Prints</p>
                 </div>
             </div>
-            <span class="bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2.5 py-1 rounded-full border border-emerald-500/30 flex items-center gap-1">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Online
+            <!-- FIX: Dynamic status element selector -->
+            <span id="printerStatusBadge" class="bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2.5 py-1 rounded-full border border-emerald-500/30 flex items-center gap-1 transition-colors duration-300">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Checking...
             </span>
         </div>
 
@@ -211,6 +219,12 @@
                     <span class="text-2xl font-black text-emerald-400">₹<span id="priceDisplay">0.00</span></span>
                 </div>
 
+                <!-- Printer Offline Warnings Banner inside printOptions panel -->
+                <div id="printerOfflineWarning" class="hidden p-3.5 bg-amber-50 border border-amber-200 rounded-2xl flex items-center space-x-2.5 text-amber-800 text-[11px] font-semibold leading-relaxed transition-all">
+                    <svg class="w-4 h-4 text-amber-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
+                    <span>Counter printer is currently offline. You can still upload files to print but output won't execute immediately.</span>
+                </div>
+
                 <!-- Payment Selection -->
                 <div class="space-y-2">
                     <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider">Select Payment Method</label>
@@ -247,7 +261,7 @@
                 <p class="text-[10px] text-slate-500 font-medium text-center">Let the counter clerk know once payment is complete.</p>
             </div>
 
-            <div id="cashPaymentBox" class="hidden p-4 border border-amber-200 bg-amber-50/50 rounded-2xl text-amber-900 text-xs font-medium leading-relaxed">
+            <div id="cashPaymentBox" class="hidden p-4 border border-amber-200 bg-amber-50/50 rounded-2xl text-amber-950 text-xs font-medium leading-relaxed">
                 Please pay <strong class="text-amber-950 font-bold">₹<span id="cashAmountText">0.00</span></strong> in cash to the counter clerk to start printing.
             </div>
 
@@ -570,10 +584,6 @@
             });
         }
 
-        function activeSelectedLayer() {
-            return activeTargetId !== null ? activeTargetId : activeImageIdx;
-        }
-
         // Click outside on A4 sheet canvas background to deselect active image layers
         document.getElementById('a4-canvas').addEventListener('pointerdown', (e) => {
             if (e.target === document.getElementById('a4-canvas')) {
@@ -725,7 +735,7 @@
             });
         }
 
-        // --- CONTEXTUAL ACTION CONTROLLERS ---
+        // --- CONTEXT TOOLBAR ACTIONS ---
         function triggerActiveCrop() {
             if (activeSelectedIdx !== null) {
                 openStandardCropper(activeSelectedIdx);
@@ -1032,6 +1042,60 @@
             const pdfBlob = pdf.output('blob');
             return new File([pdfBlob], "passport_sheet.pdf", { type: 'application/pdf' });
         }
+
+        // --- 10. DYNAMIC PRINTER STATUS MONITORING ---
+        async function checkPrinterStatus() {
+            try {
+                // Polls printer_status table for a heartbeat record (ID 1)
+                const { data, error } = await supabaseClient
+                    .from('printer_status')
+                    .select('is_online, last_seen')
+                    .eq('id', 1)
+                    .single();
+
+                if (error) {
+                    // Fallback to active online state if the database table is not established yet
+                    updateOnlineBadge(true);
+                    return;
+                }
+
+                if (data) {
+                    let isOnline = data.is_online;
+                    
+                    // Fallback heartbeat analysis: Online if local desktop agent reported within 25 seconds
+                    if (data.last_seen) {
+                        const lastSeenTime = new Date(data.last_seen).getTime();
+                        const differenceInSeconds = (Date.now() - lastSeenTime) / 1000;
+                        isOnline = differenceInSeconds < 25; 
+                    }
+                    
+                    updateOnlineBadge(isOnline);
+                }
+            } catch (err) {
+                console.warn("Heartbeat monitor connection exception:", err);
+                updateOnlineBadge(true);
+            }
+        }
+
+        function updateOnlineBadge(isOnline) {
+            const badge = document.getElementById('printerStatusBadge');
+            const warningBanner = document.getElementById('printerOfflineWarning');
+            if (!badge) return;
+
+            if (isOnline) {
+                badge.className = "bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2.5 py-1 rounded-full border border-emerald-500/30 flex items-center gap-1 transition-colors duration-300";
+                badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Online`;
+                if (warningBanner) warningBanner.classList.add('hidden');
+            } else {
+                badge.className = "bg-rose-500/20 text-rose-300 text-[10px] font-bold px-2.5 py-1 rounded-full border border-rose-500/30 flex items-center gap-1 transition-colors duration-300";
+                badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span> Offline`;
+                if (warningBanner) warningBanner.classList.remove('hidden');
+            }
+        }
+
+        // Initialize Background Heartbeat Poll every 8 seconds
+        setInterval(checkPrinterStatus, 8000);
+        checkPrinterStatus();
 
         // --- 11. SUBMIT & UPLOAD PROCESS ---
         async function submitPrintJob() {
