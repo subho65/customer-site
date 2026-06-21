@@ -92,10 +92,10 @@
                     </div>
                 </div>
 
-                <!-- Live Word-Style Drag & Resize A4 Canvas Box -->
+                <!-- Word-Style Drag, Resize, and Crop A4 Canvas Box -->
                 <div id="cropQueueBox" class="hidden space-y-3">
                     <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Configure Layout Positions</p>
-                    <p class="text-[10px] text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-lg p-2 font-medium">✨ Visual Page Editor: Drag your image to position it. Grab the blue corner handle to scale it up or down.</p>
+                    <p class="text-[10px] text-indigo-600 bg-indigo-50 border border-indigo-100 rounded-lg p-2.5 font-medium">✨ Visual Page Editor: Click "Crop" to clip the image. Drag inside the image to position, or use the blue handle to scale.</p>
                     <div id="imageList" class="space-y-4"></div>
                 </div>
             </div>
@@ -243,7 +243,7 @@
         </div>
     </div>
 
-    <!-- Image Cropper Modal popup (FOR PASSPORT WORKFLOW ONLY) -->
+    <!-- Image Cropper Modal popup -->
     <div id="cropperModal" class="hidden fixed inset-0 bg-black/85 flex flex-col items-center justify-center p-4 z-50 backdrop-blur-sm">
         <div class="max-w-md w-full bg-white p-5 rounded-3xl flex flex-col items-center shadow-2xl">
             <h4 class="text-sm font-bold text-slate-800 mb-1">Adjust & Crop Image</h4>
@@ -426,7 +426,7 @@
                             let defaultWidth = 160;
                             let defaultHeight = 160 / ratio;
 
-                            // Scale within limits safely
+                            // Scale inside target bounds
                             if (defaultHeight > 250) {
                                 defaultHeight = 250;
                                 defaultWidth = 250 * ratio;
@@ -515,16 +515,19 @@
                 imageList.innerHTML += `
                     <div class="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm space-y-3 select-none">
                         <div class="flex items-center justify-between border-b border-slate-100 pb-2 mb-2">
-                            <span class="text-xs font-bold text-slate-700 truncate max-w-[180px]">${img.name}</span>
-                            <button type="button" onclick="resetImageOnCanvas(${idx})" class="text-blue-600 hover:text-blue-700 text-xs font-semibold transition">Reset Layout</button>
+                            <span class="text-xs font-bold text-slate-700 truncate max-w-[150px]">${img.name}</span>
+                            <div class="flex items-center space-x-2">
+                                <button type="button" onclick="openStandardCropper(${idx})" class="bg-blue-50 hover:bg-blue-100 text-blue-600 text-[10px] px-2.5 py-1.5 rounded-xl font-bold transition">✂️ Crop</button>
+                                <button type="button" onclick="resetImageOnCanvas(${idx})" class="text-slate-400 hover:text-slate-600 text-[10px] font-semibold transition">Reset</button>
+                            </div>
                         </div>
                         
-                        <!-- Virtual Interactive A4 Design Canvas (260px wide, ~368px high matching A4 portrait scale) -->
+                        <!-- Virtual Interactive A4 Design Canvas -->
                         <div class="flex flex-col items-center justify-center bg-slate-100/50 rounded-2xl p-4 border border-slate-200/50">
                             <div id="a4-canvas-${idx}" class="relative bg-white aspect-[210/297] w-[260px] shadow-lg border border-slate-300 rounded overflow-hidden select-none">
                                 <!-- Draggable Image Frame -->
                                 <div id="wrapper-${idx}" class="absolute cursor-move border border-blue-500 bg-blue-500/5 select-none touch-none" style="left: ${img.left}px; top: ${img.top}px; width: ${img.width}px; height: ${img.height}px;">
-                                    <img src="${img.originalUrl}" class="w-full h-full object-cover pointer-events-none select-none">
+                                    <img src="${img.croppedUrl}" class="w-full h-full object-cover pointer-events-none select-none">
                                     <!-- Corner Resize Handle -->
                                     <div class="absolute -right-2 -bottom-2 w-5 h-5 bg-blue-600 border-2 border-white rounded-full cursor-se-resize shadow-md flex items-center justify-center pointer-events-auto active:scale-125 transition-transform" id="resize-handle-${idx}"></div>
                                 </div>
@@ -615,7 +618,6 @@
 
                 const dx = e.clientX - startX;
 
-                // Scale locked strictly to the original aspect ratio of the image
                 let newWidth = startWidth + dx;
                 let newHeight = newWidth / imgState.ratio;
 
@@ -670,7 +672,26 @@
             }
         }
 
-        // --- 5. CROPPER MODAL CONTROLLERS (PASSPORT ONLY) ---
+        // --- 5. CROPPER MODAL CONTROLLERS ---
+        function openStandardCropper(index) {
+            activeCropIndex = index;
+            document.getElementById('cropHelperText').innerText = "Crop the image to your desired print dimensions.";
+            
+            const modal = document.getElementById('cropperModal');
+            const cropImg = document.getElementById('cropperImage');
+            
+            cropImg.src = rawImagesArray[index].originalUrl; // Base cropping on original resolution file
+            modal.classList.remove('hidden');
+
+            if (cropperInstance) cropperInstance.destroy();
+            cropperInstance = new Cropper(cropImg, {
+                viewMode: 1,
+                autoCropArea: 1,
+                responsive: true,
+                aspectRatio: NaN // Enable free aspect ratio cropping for standard prints
+            });
+        }
+
         function openPassportCropper() {
             activeCropIndex = 'passport';
             document.getElementById('cropHelperText').innerText = "Crop locks ratio to 35:45 (Standard Passport Photo aspect ratio).";
@@ -701,11 +722,28 @@
             const canvas = cropperInstance.getCroppedCanvas();
             const croppedDataUrl = canvas.toDataURL('image/jpeg', 0.9);
 
-            passportCroppedUrl = croppedDataUrl;
-            document.getElementById('passportPreviewImg').src = croppedDataUrl;
-            updatePassportPreviewGrid();
+            if (activeCropIndex === 'passport') {
+                passportCroppedUrl = croppedDataUrl;
+                document.getElementById('passportPreviewImg').src = croppedDataUrl;
+                updatePassportPreviewGrid();
+                closeCropper();
+            } else {
+                // Update crop image parameters and reset canvas grid measurements matching new ratio
+                const imgState = rawImagesArray[activeCropIndex];
+                imgState.croppedUrl = croppedDataUrl;
 
-            closeCropper();
+                const imgObj = new Image();
+                imgObj.onload = function() {
+                    imgState.ratio = imgObj.width / imgObj.height;
+                    
+                    // Adjust height scaling dynamically based on new cropped aspect ratio
+                    imgState.height = imgState.width / imgState.ratio;
+                    
+                    renderImageGrid();
+                    closeCropper();
+                };
+                imgObj.src = croppedDataUrl;
+            }
         }
 
         // --- 6. PASSPORT INPUT & LIVE A4 PREVIEW (6x6) ---
@@ -785,7 +823,6 @@
             const { jsPDF } = window.jspdf;
             const pdf = new jsPDF('p', 'mm', 'a4'); // A4 Standard: 210 x 297 mm
             
-            // Layout baseline dimensions matching container scales
             const canvasWidthPx = 260;
             const canvasHeightPx = 367.7; // Derived using aspect ratio of A4 sheet base width
 
@@ -794,13 +831,13 @@
                 
                 const imgObj = rawImagesArray[idx];
 
-                // Convert CSS pixel placements into A4 Millimeters output
+                // Convert CSS pixel placements into A4 Millimeters output using the user's cropped layout
                 const x_mm = (imgObj.left / canvasWidthPx) * 210;
                 const y_mm = (imgObj.top / canvasHeightPx) * 297;
                 const w_mm = (imgObj.width / canvasWidthPx) * 210;
                 const h_mm = (imgObj.height / canvasHeightPx) * 297;
 
-                pdf.addImage(imgObj.originalUrl, 'JPEG', x_mm, y_mm, w_mm, h_mm);
+                pdf.addImage(imgObj.croppedUrl, 'JPEG', x_mm, y_mm, w_mm, h_mm);
             }
 
             const pdfBlob = pdf.output('blob');
